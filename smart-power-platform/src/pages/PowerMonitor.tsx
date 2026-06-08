@@ -61,7 +61,7 @@ export default function PowerMonitor() {
   const filteredSources = useMemo(() => {
     let result = sources
     if (user?.role === 1) {
-      result = result.filter((s) => s.id === user.plantId || s.area === user.area)
+      result = result.filter((s) => s.id === user.plantId)
     }
     if (areaFilter) {
       result = result.filter((s) => s.area === areaFilter)
@@ -80,7 +80,13 @@ export default function PowerMonitor() {
     return { totalCapacity, currentOutput, onlineCount, utilization }
   }, [filteredSources])
 
-  const balance = useMemo(() => calcPowerBalance(totalGeneration, totalLoad), [totalGeneration, totalLoad])
+  const balance = useMemo(() => {
+    if (user?.role === 1) {
+      const myGen = filteredSources.filter((s) => s.status === 'online').reduce((sum, s) => sum + s.currentOutput, 0)
+      return calcPowerBalance(myGen, 0)
+    }
+    return calcPowerBalance(totalGeneration, totalLoad)
+  }, [filteredSources, totalGeneration, totalLoad, user])
 
   const generationByType = useMemo(() => {
     const map: Record<string, number> = { thermal: 0, hydro: 0, wind: 0, solar: 0 }

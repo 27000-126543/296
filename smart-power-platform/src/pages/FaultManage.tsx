@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Card, Row, Col, Table, Tag, Button, Statistic, Typography, Modal, Select, Space, message, Timeline } from 'antd'
 import {
   WarningOutlined,
@@ -77,6 +77,13 @@ export default function FaultManage() {
 
   const canOperate = (user?.role ?? 0) >= 3
 
+  const filteredRecords = useMemo(() => {
+    if (!user) return records
+    if (user.role === 1) return records.filter((r) => r.area === user.area)
+    if (user.role === 2) return records.filter((r) => user.proxyAreas?.includes(r.area))
+    return records
+  }, [records, user])
+
   useEffect(() => {
     checkTimeout()
     const timer = setInterval(() => {
@@ -85,11 +92,11 @@ export default function FaultManage() {
     return () => clearInterval(timer)
   }, [checkTimeout])
 
-  const totalCount = records.length
-  const pendingCount = records.filter((r) => r.status === 'pending' || r.status === 'assigned' || r.status === 'accepted').length
-  const repairingCount = records.filter((r) => r.status === 'repairing').length
-  const resolvedCount = records.filter((r) => r.status === 'resolved').length
-  const escalatedCount = records.filter((r) => r.escalated).length
+  const totalCount = filteredRecords.length
+  const pendingCount = filteredRecords.filter((r) => r.status === 'pending' || r.status === 'assigned' || r.status === 'accepted').length
+  const repairingCount = filteredRecords.filter((r) => r.status === 'repairing').length
+  const resolvedCount = filteredRecords.filter((r) => r.status === 'resolved').length
+  const escalatedCount = filteredRecords.filter((r) => r.escalated).length
 
   const handleAssign = () => {
     if (!selectedFault || !selectedTeam) return
@@ -127,7 +134,7 @@ export default function FaultManage() {
   }
 
   const areaCountMap: Record<string, number> = {}
-  records.forEach((r) => {
+  filteredRecords.forEach((r) => {
     areaCountMap[r.area] = (areaCountMap[r.area] || 0) + 1
   })
 
@@ -149,7 +156,7 @@ export default function FaultManage() {
   }
 
   const levelCountMap: Record<string, number> = {}
-  records.forEach((r) => {
+  filteredRecords.forEach((r) => {
     levelCountMap[r.level] = (levelCountMap[r.level] || 0) + 1
   })
 
@@ -365,7 +372,7 @@ export default function FaultManage() {
       <Card style={{ ...cardStyle, marginTop: 16 }} title="故障记录列表">
         <Table
           columns={columns}
-          dataSource={records}
+          dataSource={filteredRecords}
           rowKey="id"
           size="middle"
           scroll={{ x: 1400 }}

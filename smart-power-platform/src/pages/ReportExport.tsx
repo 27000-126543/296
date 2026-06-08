@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react'
-import { Card, Row, Col, Table, Tag, Button, Select, DatePicker, Statistic, Typography, Space, Checkbox, message } from 'antd'
+import { Card, Row, Col, Table, Tag, Button, Select, DatePicker, Statistic, Typography, Space, Checkbox, message, Alert } from 'antd'
 import {
   SearchOutlined,
   UndoOutlined,
@@ -16,6 +16,7 @@ import ReactECharts from 'echarts-for-react'
 import { usePowerStore } from '../store/usePowerStore'
 import { useFaultStore } from '../store/useFaultStore'
 import { useCarbonStore } from '../store/useCarbonStore'
+import { useAuthStore } from '../store/useAuthStore'
 import { downloadExcel, formatPower, calcPowerBalance } from '../utils/helpers'
 import { AREAS, SOURCE_TYPES } from '../types'
 import dayjs from 'dayjs'
@@ -47,14 +48,60 @@ export default function ReportExport() {
   const { sources, loadData } = usePowerStore()
   const { records: faultRecords } = useFaultStore()
   const { data: carbonData } = useCarbonStore()
+  const { user } = useAuthStore()
+
+  const userRole = user?.role ?? 0
+
+  const allowedExports = useMemo(() => {
+    if (userRole === 0 || userRole === 2) return ['load']
+    if (userRole === 1) return ['power', 'fault', 'carbon']
+    return ['power', 'load', 'fault', 'carbon']
+  }, [userRole])
 
   const [areaFilter, setAreaFilter] = useState<string | undefined>(undefined)
   const [typeFilter, setTypeFilter] = useState<string | undefined>(undefined)
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(null)
   const [exportOptions, setExportOptions] = useState<string[]>(['power', 'load', 'fault', 'carbon'])
 
-  const filteredSources = useMemo(() => {
+  const effectiveExportOptions = exportOptions.filter((o) => allowedExports.includes(o))
+
+  const roleFilteredSources = useMemo(() => {
     let result = sources
+    if (userRole === 1 && user?.plantId) {
+      result = result.filter((s) => s.id === user.plantId)
+    }
+    return result
+  }, [sources, userRole, user])
+
+  const roleFilteredLoad = useMemo(() => {
+    if (userRole === 2 && user?.proxyAreas && user.proxyAreas.length > 0) {
+      return loadData.filter((d) => user.proxyAreas!.includes(d.area))
+    }
+    if (userRole === 0 && user?.area) {
+      return loadData.filter((d) => d.area === user.area)
+    }
+    return loadData
+  }, [loadData, userRole, user])
+
+  const roleFilteredFaults = useMemo(() => {
+    if (userRole === 1 && user?.area) {
+      return faultRecords.filter((f) => f.area === user.area)
+    }
+    if (userRole === 2 && user?.proxyAreas) {
+      return faultRecords.filter((f) => user.proxyAreas!.includes(f.area))
+    }
+    return faultRecords
+  }, [faultRecords, userRole, user])
+
+  const roleFilteredCarbon = useMemo(() => {
+    if (userRole === 1 && user?.area) {
+      return carbonData.filter((c) => c.area === user.area)
+    }
+    return carbonData
+  }, [carbonData, userRole, user])
+
+  const filteredSources = useMemo(() => {
+    let result = roleFilteredSources
     if (areaFilter) {
       result = result.filter((s) => s.area === areaFilter)
     }
@@ -62,18 +109,18 @@ export default function ReportExport() {
       result = result.filter((s) => s.type === typeFilter)
     }
     return result
-  }, [sources, areaFilter, typeFilter])
+  }, [roleFilteredSources, areaFilter, typeFilter])
 
   const filteredLoad = useMemo(() => {
-    let result = loadData
+    let result = roleFilteredLoad
     if (areaFilter) {
       result = result.filter((l) => l.area === areaFilter)
     }
     return result
-  }, [loadData, areaFilter])
+  }, [roleFilteredLoad, areaFilter])
 
   const filteredFaults = useMemo(() => {
-    let result = faultRecords
+    let result = roleFilteredFaults
     if (areaFilter) {
       result = result.filter((f) => f.area === areaFilter)
     }
@@ -86,15 +133,15 @@ export default function ReportExport() {
       })
     }
     return result
-  }, [faultRecords, areaFilter, dateRange])
+  }, [roleFilteredFaults, areaFilter, dateRange])
 
   const filteredCarbon = useMemo(() => {
-    let result = carbonData
+    let result = roleFilteredCarbon
     if (areaFilter) {
       result = result.filter((c) => c.area === areaFilter)
     }
     return result
-  }, [carbonData, areaFilter])
+  }, [roleFilteredCarbon, areaFilter])
 
   const stats = useMemo(() => {
     const totalGen = filteredSources.filter((s) => s.status === 'online').reduce((sum, s) => sum + s.currentOutput, 0)
@@ -229,15 +276,15 @@ export default function ReportExport() {
   }
 
   const handleExport = () => {
-    if (exportOptions.length === 0) {
-      message.warning('请至少选择一项导出内容')
+    if (effectiveExportOptions.length === 0) {
+      message.warning('当前角色无可用导出内容')
       return
     }
     const now = dayjs()
     const filename = `月度电力运行分析报告_${now.format('YYYYMM')}`
     const allData: Record<string, unknown>[] = []
 
-    if (exportOptions.includes('power')) {
+    if (effectiveExportOptions.includes('power')) {
       filteredSources.forEach((s) => {
         allData.push({
           '名称': s.name,
@@ -249,7 +296,7 @@ export default function ReportExport() {
         })
       })
     }
-    if (exportOptions.includes('load')) {
+    if (effectiveExportOptions.includes('load')) {
       filteredLoad.forEach((l) => {
         allData.push({
           '区域': l.area,
@@ -261,7 +308,7 @@ export default function ReportExport() {
         })
       })
     }
-    if (exportOptions.includes('fault')) {
+    if (effectiveExportOptions.includes('fault')) {
       filteredFaults.forEach((f) => {
         allData.push({
           '故障编号': f.id,
@@ -275,7 +322,7 @@ export default function ReportExport() {
         })
       })
     }
-    if (exportOptions.includes('carbon')) {
+    if (effectiveExportOptions.includes('carbon')) {
       filteredCarbon.forEach((c) => {
         allData.push({
           '区域': c.area,
@@ -292,12 +339,14 @@ export default function ReportExport() {
     message.success('报告导出成功')
   }
 
-  const exportOptionsList = [
+  const allExportOptionsList = [
     { label: '电源数据', value: 'power' },
     { label: '负荷数据', value: 'load' },
     { label: '故障数据', value: 'fault' },
     { label: '碳排放数据', value: 'carbon' },
   ]
+
+  const exportOptionsList = allExportOptionsList.filter((o) => allowedExports.includes(o.value))
 
   const columns = [
     { title: '名称', dataIndex: 'name', key: 'name', width: 140 },
@@ -347,6 +396,14 @@ export default function ReportExport() {
       </div>
 
       <Card style={{ ...cardStyle, marginBottom: 16 }} bodyStyle={{ padding: '12px 24px' }}>
+        {userRole < 4 && (
+          <Alert
+            type="info"
+            showIcon
+            message={`当前角色：${user?.username || '未知'}，可导出范围：${exportOptionsList.map((o) => o.label).join('、')}`}
+            style={{ marginBottom: 12 }}
+          />
+        )}
         <Space size="middle" wrap>
           <span style={{ fontSize: 14, color: '#595959' }}>区域:</span>
           <Select

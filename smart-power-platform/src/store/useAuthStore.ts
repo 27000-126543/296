@@ -10,8 +10,8 @@ interface AuthState {
 
 const DEMO_USERS: Record<number, User> = {
   0: { id: 'U001', username: '普通用户', role: 0, area: '华东' },
-  1: { id: 'U002', username: '华电电厂管理员', role: 1, area: '华东', plantId: 'PS001' },
-  2: { id: 'U003', username: '国电售电公司', role: 2, companyId: 'SEC001' },
+  1: { id: 'U002', username: '华电电厂管理员', role: 1, area: '华东', plantId: 'PS001', plantName: '华电火电1号' },
+  2: { id: 'U003', username: '国电售电公司', role: 2, companyId: 'SEC001', proxyAreas: ['华东', '华南'] },
   3: { id: 'U004', username: '调度员张伟', role: 3 },
   4: { id: 'U005', username: '系统管理员', role: 4 },
 }

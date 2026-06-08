@@ -37,7 +37,10 @@ export default function LoadPrice() {
   const [priceData, setPriceData] = useState(() => generatePriceData())
 
   const filteredLoadData = useMemo(() => {
-    if (user?.role === 2 && user?.area) {
+    if (user?.role === 2 && user?.proxyAreas && user.proxyAreas.length > 0) {
+      return loadData.filter((d) => user.proxyAreas!.includes(d.area))
+    }
+    if (user?.role === 0 && user?.area) {
       return loadData.filter((d) => d.area === user.area)
     }
     return loadData

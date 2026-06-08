@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Card, Row, Col, Table, Tag, Button, Statistic, Typography, Modal, Space, Steps, message } from 'antd'
+import { Card, Row, Col, Table, Tag, Button, Statistic, Typography, Modal, Space, Steps, Timeline, message } from 'antd'
 import {
   ClockCircleOutlined,
   SyncOutlined,
@@ -50,7 +50,7 @@ const STATUS_STEP_MAP: Record<DispatchOrder['status'], number> = {
 }
 
 export default function DispatchManage() {
-  const { orders, confirmOrder, rejectOrder, completeOrder, autoGenerate } = useDispatchStore()
+  const { orders, auditLogs, confirmOrder, rejectOrder, completeOrder, autoGenerate } = useDispatchStore()
   const { totalGeneration, totalLoad } = usePowerStore()
   const user = useAuthStore((s) => s.user)
   const [detailOrder, setDetailOrder] = useState<DispatchOrder | null>(null)
@@ -498,6 +498,40 @@ export default function DispatchManage() {
                 <Text type="secondary">完成时间</Text>
                 <div><Text>{detailOrder.completedAt ? formatDate(detailOrder.completedAt) : '-'}</Text></div>
               </div>
+            </div>
+
+            <div style={{ marginTop: 20 }}>
+              <Text type="secondary" style={{ fontSize: 13 }}>操作台账</Text>
+              {(() => {
+                const relatedLogs = auditLogs.filter((l) => l.orderId === detailOrder.id)
+                if (relatedLogs.length === 0) return <div style={{ marginTop: 8, color: '#8c8c8c' }}>暂无操作记录</div>
+                return (
+                  <Timeline
+                    style={{ marginTop: 8 }}
+                    items={relatedLogs.map((log) => {
+                      const actionLabel: Record<string, { color: string; label: string }> = {
+                        confirm: { color: 'blue', label: '确认执行' },
+                        reject: { color: 'red', label: '拒绝' },
+                        complete: { color: 'green', label: '标记完成' },
+                        auto_generate: { color: 'gold', label: '自动生成' },
+                      }
+                      const cfg = actionLabel[log.action] || { color: 'default', label: log.action }
+                      return {
+                        color: cfg.color,
+                        children: (
+                          <div>
+                            <div><Tag color={cfg.color} style={{ marginRight: 4 }}>{cfg.label}</Tag><Text type="secondary" style={{ fontSize: 12 }}>{formatDate(log.timestamp)}</Text></div>
+                            <div style={{ marginTop: 4, fontSize: 13 }}>{log.detail}</div>
+                            <div style={{ marginTop: 2, fontSize: 12, color: '#8c8c8c' }}>操作人：{log.operator}</div>
+                            {log.balanceBefore != null && <div style={{ fontSize: 12, color: '#8c8c8c' }}>当时供需偏差：{log.balanceBefore.toFixed(1)}MW</div>}
+                            {log.outputBefore != null && log.outputAfter != null && <div style={{ fontSize: 12, color: '#8c8c8c' }}>出力变化：{log.outputBefore.toFixed(1)}MW → {log.outputAfter.toFixed(1)}MW</div>}
+                          </div>
+                        ),
+                      }
+                    })}
+                  />
+                )
+              })()}
             </div>
           </div>
         )}

@@ -107,6 +107,23 @@ export interface StorageStation {
   dailyPlan: ChargeDischargePlan[]
   estimatedRevenue: number
   manualOverride: boolean
+  overrideReason?: string
+  overrideStartAt?: string
+  overrideRecoverAt?: string
+  plannedAction?: 'charging' | 'discharging' | 'standby'
+}
+
+export interface DispatchAuditLog {
+  id: string
+  orderId: string
+  action: 'confirm' | 'reject' | 'complete' | 'auto_generate'
+  operator: string
+  timestamp: string
+  detail: string
+  balanceBefore?: number
+  balanceAfter?: number
+  outputBefore?: number
+  outputAfter?: number
 }
 
 export interface CarbonData {
@@ -139,6 +156,8 @@ export interface User {
   area?: string
   plantId?: string
   companyId?: string
+  proxyAreas?: string[]
+  plantName?: string
 }
 
 export const USER_ROLES: Record<number, UserRole> = {

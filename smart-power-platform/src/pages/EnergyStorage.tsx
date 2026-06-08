@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Card, Row, Col, Table, Tag, Button, Statistic, Progress, Typography, Space, Switch, Radio, message } from 'antd'
+import { Card, Row, Col, Table, Tag, Button, Statistic, Progress, Typography, Space, Switch, Radio, message, Modal, Input, Alert } from 'antd'
 import {
   ThunderboltOutlined,
   DatabaseOutlined,
@@ -155,10 +155,12 @@ const planColumns = [
 ]
 
 export default function EnergyStorage() {
-  const { stations, setMode, setStrategy, applyAutoPlan, refresh } = useStorageStore()
+  const { stations, setMode, setStrategy, applyAutoPlan, recoverAuto, refresh } = useStorageStore()
   const { user } = useAuthStore()
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set())
   const [planPage, setPlanPage] = useState<Record<string, number>>({})
+  const [overrideModal, setOverrideModal] = useState<{ id: string; mode: 'charging' | 'discharging' | 'standby' } | null>(null)
+  const [overrideReason, setOverrideReason] = useState('')
 
   const canOperate = (user?.role ?? 0) >= 3
 
@@ -177,8 +179,27 @@ export default function EnergyStorage() {
   }
 
   const handleModeChange = (id: string, mode: 'charging' | 'discharging' | 'standby') => {
-    setMode(id, mode)
-    message.success(`已切换为${modeConfig[mode].label}模式`)
+    const station = stations.find((s) => s.id === id)
+    if (station?.strategy === 'auto') {
+      setOverrideModal({ id, mode })
+      setOverrideReason('')
+    } else {
+      setMode(id, mode)
+      message.success(`已切换为${modeConfig[mode].label}模式`)
+    }
+  }
+
+  const handleOverrideConfirm = () => {
+    if (!overrideModal) return
+    setMode(overrideModal.id, overrideModal.mode, overrideReason || undefined)
+    message.success(`已临时覆盖为${modeConfig[overrideModal.mode].label}，预计2小时后恢复自动策略`)
+    setOverrideModal(null)
+    setOverrideReason('')
+  }
+
+  const handleRecoverAuto = (id: string) => {
+    recoverAuto(id)
+    message.success('已恢复自动策略')
   }
 
   const handleStrategyChange = (id: string, checked: boolean) => {
@@ -393,6 +414,27 @@ export default function EnergyStorage() {
                   </div>
                 }
               >
+                {station.manualOverride && (
+                  <Alert
+                    type="warning"
+                    showIcon
+                    message="临时覆盖中"
+                    description={
+                      <div>
+                        <div>覆盖原因：{station.overrideReason || '调度员临时覆盖'}</div>
+                        <div>开始时间：{station.overrideStartAt}</div>
+                        <div>预计恢复：{station.overrideRecoverAt}</div>
+                        <div>计划动作：{station.plannedAction ? modeConfig[station.plannedAction].label : '-'}</div>
+                        {canOperate && (
+                          <Button size="small" type="primary" style={{ marginTop: 8 }} onClick={() => handleRecoverAuto(station.id)}>
+                            立即恢复自动策略
+                          </Button>
+                        )}
+                      </div>
+                    }
+                    style={{ marginBottom: 12 }}
+                  />
+                )}
                 <Row gutter={[16, 12]}>
                   <Col span={6}>
                     <Text type="secondary">装机容量</Text>
@@ -557,6 +599,28 @@ export default function EnergyStorage() {
           </Card>
         </Col>
       </Row>
+
+      <Modal
+        title="临时覆盖确认"
+        open={!!overrideModal}
+        onOk={handleOverrideConfirm}
+        onCancel={() => { setOverrideModal(null); setOverrideReason('') }}
+        okText="确认覆盖"
+        cancelText="取消"
+      >
+        <div style={{ marginBottom: 12 }}>
+          <Text>将临时覆盖为 <Tag color={overrideModal ? modeConfig[overrideModal.mode].color : ''}>{overrideModal ? modeConfig[overrideModal.mode].label : ''}</Tag> 模式，预计2小时后自动恢复计划策略。</Text>
+        </div>
+        <div style={{ marginBottom: 8 }}>
+          <Text type="secondary">覆盖原因：</Text>
+        </div>
+        <Input.TextArea
+          rows={3}
+          value={overrideReason}
+          onChange={(e) => setOverrideReason(e.target.value)}
+          placeholder="请输入临时覆盖原因"
+        />
+      </Modal>
     </div>
   )
 }

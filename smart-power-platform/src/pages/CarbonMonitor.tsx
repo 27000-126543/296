@@ -29,7 +29,11 @@ export default function CarbonMonitor() {
   const { user } = useAuthStore()
 
   const filteredData = useMemo(() => {
-    if (user?.role === 1 && user?.area) {
+    if (!user) return data
+    if (user.role === 1 && user.area) {
+      return data.filter((d) => d.area === user.area)
+    }
+    if (user.role === 0 && user.area) {
       return data.filter((d) => d.area === user.area)
     }
     return data
