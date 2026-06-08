@@ -99,7 +99,6 @@ export default function DispatchManage() {
 
   const handleAutoGenerate = () => {
     autoGenerate()
-    message.success('已检测供需状态并生成调度建议')
   }
 
   const typeCountMap: Record<string, number> = {}

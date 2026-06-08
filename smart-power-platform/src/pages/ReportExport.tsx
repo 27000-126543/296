@@ -270,7 +270,7 @@ export default function ReportExport() {
           '类型': f.type,
           '等级': f.level === 'critical' ? '严重' : f.level === 'major' ? '重大' : '一般',
           '描述': f.description,
-          '状态': f.status === 'pending' ? '待处理' : f.status === 'assigned' ? '已分配' : f.status === 'repairing' ? '修复中' : '已解决',
+          '状态': f.status === 'pending' ? '待处理' : f.status === 'assigned' ? '已分配' : f.status === 'accepted' ? '已接单' : f.status === 'repairing' ? '抢修中' : '已修复',
           '发生时间': f.createdAt,
         })
       })

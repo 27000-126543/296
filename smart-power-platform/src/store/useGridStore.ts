@@ -10,6 +10,7 @@ interface GridState {
   approveGm: (id: string) => void
   reject: (id: string) => void
   submitApplication: (app: Partial<GridApplication>) => void
+  adoptSuggestion: (id: string) => void
   refresh: () => void
 }
 
@@ -54,7 +55,7 @@ export const useGridStore = create<GridState>((set) => ({
           sourceType: app.sourceType || 'wind',
           capacity,
           plannedOutput,
-          recommendedPoint: checkResult.suggestedPoint && !checkResult.passed ? checkResult.suggestedPoint : recommendedPoint,
+          recommendedPoint,
           status: 'submitted' as const,
           currentApprovalLevel: 0 as const,
           submittedAt: dayjs().format('YYYY-MM-DD HH:mm:ss'),
@@ -63,6 +64,23 @@ export const useGridStore = create<GridState>((set) => ({
         },
         ...state.applications,
       ],
+    }))
+  },
+  adoptSuggestion: (id) => {
+    set((state) => ({
+      applications: state.applications.map((a) => {
+        if (a.id !== id) return a
+        const checkResult = a.capacityCheckResult
+        if (!checkResult?.suggestedPoint) return a
+        const newPoint = checkResult.suggestedPoint
+        const newCheckResult = checkCapacity(a.capacity, a.plannedOutput, newPoint)
+        return {
+          ...a,
+          recommendedPoint: newPoint,
+          capacityVerified: newCheckResult.passed,
+          capacityCheckResult: newCheckResult,
+        }
+      }),
     }))
   },
   refresh: () => {

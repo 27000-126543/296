@@ -362,6 +362,9 @@ export default function EnergyStorage() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                     <Space>
                       <span style={{ fontWeight: 600 }}>{station.name}</span>
+                      {station.manualOverride && (
+                        <Tag color="warning">临时覆盖</Tag>
+                      )}
                       <Tag color={isAuto ? 'blue' : 'default'}>
                         {isAuto ? <RobotOutlined style={{ marginRight: 4 }} /> : null}
                         {isAuto ? '自动策略运行中' : '手动控制'}
@@ -376,14 +379,16 @@ export default function EnergyStorage() {
                         valueStyle={{ color: station.estimatedRevenue >= 0 ? '#52c41a' : '#ff4d4f', fontSize: 18 }}
                         style={{ marginRight: 8 }}
                       />
-                      <Button
-                        type="primary"
-                        size="small"
-                        icon={<ScheduleOutlined />}
-                        onClick={() => handleApplyPlan(station.id)}
-                      >
-                        生成充放电计划
-                      </Button>
+                      {canOperate && (
+                        <Button
+                          type="primary"
+                          size="small"
+                          icon={<ScheduleOutlined />}
+                          onClick={() => handleApplyPlan(station.id)}
+                        >
+                          生成充放电计划
+                        </Button>
+                      )}
                     </Space>
                   </div>
                 }
@@ -425,34 +430,42 @@ export default function EnergyStorage() {
                     <div><Text strong style={{ color: '#52c41a' }}>{station.dischargeRate.toFixed(1)}MW</Text></div>
                   </Col>
                   <Col span={24}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                      <Space>
-                        <Text type="secondary">运行模式</Text>
-                        <Radio.Group
-                          size="small"
-                          value={station.mode}
-                          onChange={(e) => handleModeChange(station.id, e.target.value)}
-                          optionType="button"
-                          buttonStyle="solid"
-                          disabled={isAuto || !canOperate}
-                        >
-                          <Radio.Button value="charging" style={{ color: !isAuto && station.mode === 'charging' ? '#1890ff' : undefined }}>充电</Radio.Button>
-                          <Radio.Button value="discharging" style={{ color: !isAuto && station.mode === 'discharging' ? '#52c41a' : undefined }}>放电</Radio.Button>
-                          <Radio.Button value="standby">待机</Radio.Button>
-                        </Radio.Group>
-                      </Space>
-                      <Space>
-                        <Text type="secondary">自动策略</Text>
-                        <Switch
-                          size="small"
-                          checked={isAuto}
-                          onChange={(checked) => handleStrategyChange(station.id, checked)}
-                          checkedChildren="自动"
-                          unCheckedChildren="手动"
-                          disabled={!canOperate}
-                        />
-                      </Space>
-                    </div>
+                    {canOperate ? (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                        <Space>
+                          <Text type="secondary">运行模式</Text>
+                          <Radio.Group
+                            size="small"
+                            value={station.mode}
+                            onChange={(e) => handleModeChange(station.id, e.target.value)}
+                            optionType="button"
+                            buttonStyle="solid"
+                            disabled={isAuto}
+                          >
+                            <Radio.Button value="charging" style={{ color: !isAuto && station.mode === 'charging' ? '#1890ff' : undefined }}>充电</Radio.Button>
+                            <Radio.Button value="discharging" style={{ color: !isAuto && station.mode === 'discharging' ? '#52c41a' : undefined }}>放电</Radio.Button>
+                            <Radio.Button value="standby">待机</Radio.Button>
+                          </Radio.Group>
+                        </Space>
+                        <Space>
+                          <Text type="secondary">自动策略</Text>
+                          <Switch
+                            size="small"
+                            checked={isAuto}
+                            onChange={(checked) => handleStrategyChange(station.id, checked)}
+                            checkedChildren="自动"
+                            unCheckedChildren="手动"
+                          />
+                        </Space>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                        <Text type="secondary">运行模式:</Text>
+                        <Tag color={modeInfo.color}>{modeInfo.label}</Tag>
+                        <Text type="secondary" style={{ marginLeft: 8 }}>策略:</Text>
+                        <Tag color={isAuto ? 'blue' : 'default'}>{isAuto ? '自动' : '手动'}</Tag>
+                      </div>
+                    )}
                   </Col>
 
                   <Col span={24}>

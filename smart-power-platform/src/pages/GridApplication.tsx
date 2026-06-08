@@ -57,7 +57,7 @@ function generateTypicalCurve(sourceType: 'wind' | 'solar', capacity: number): n
 }
 
 export default function GridApplicationPage() {
-  const { applications, approveDept, approveVice, approveGm, reject, submitApplication, refresh } = useGridStore()
+  const { applications, approveDept, approveVice, approveGm, reject, submitApplication, adoptSuggestion, refresh } = useGridStore()
   const { user } = useAuthStore()
   const [modalOpen, setModalOpen] = useState(false)
   const [form] = Form.useForm()
@@ -117,15 +117,8 @@ export default function GridApplicationPage() {
   const handleAdoptSuggestion = (record: GridApplication) => {
     const checkResult = record.capacityCheckResult
     if (!checkResult?.suggestedPoint) return
-    submitApplication({
-      applicant: record.applicant,
-      sourceType: record.sourceType,
-      capacity: record.capacity,
-      recommendedPoint: checkResult.suggestedPoint,
-      plannedOutput: record.plannedOutput,
-      capacityVerified: false,
-    })
-    message.success(`已采纳建议并网点：${checkResult.suggestedPoint}`)
+    adoptSuggestion(record.id)
+    message.success(`已采纳建议并网点：${checkResult.suggestedPoint}，当前申请已更新`)
   }
 
   const canApproveDept = userRole >= 3
@@ -169,20 +162,27 @@ export default function GridApplicationPage() {
           type="success"
           showIcon
           message="容量校核通过"
-          description={`${checkResult.reason}（峰值计划出力 ${checkResult.peakPlan.toFixed(1)}MW，并网点剩余容量 ${checkResult.pointRemaining.toFixed(1)}MW）`}
+          description={checkResult.reason}
           style={{ marginBottom: 16 }}
         />
       )
     }
-    const desc = checkResult.suggestedPoint
-      ? `${checkResult.reason}（峰值计划出力 ${checkResult.peakPlan.toFixed(1)}MW，当前并网点剩余容量 ${checkResult.pointRemaining.toFixed(1)}MW）。建议并网点：${checkResult.suggestedPoint}（剩余容量 ${checkResult.suggestedPointRemaining?.toFixed(1)}MW）`
-      : `${checkResult.reason}（峰值计划出力 ${checkResult.peakPlan.toFixed(1)}MW，并网点剩余容量 ${checkResult.pointRemaining.toFixed(1)}MW）`
+    const failReasons: string[] = []
+    if (checkResult.capacityOver) {
+      failReasons.push(`申请容量${checkResult.capacityValue.toFixed(1)}MW超过并网点剩余容量${checkResult.pointRemaining.toFixed(1)}MW`)
+    }
+    if (checkResult.peakOver) {
+      failReasons.push(`计划峰值${checkResult.peakPlan.toFixed(1)}MW超过并网点剩余容量${checkResult.pointRemaining.toFixed(1)}MW`)
+    }
+    const suggestText = checkResult.suggestedPoint
+      ? `建议并网点：${checkResult.suggestedPoint}（剩余容量 ${checkResult.suggestedPointRemaining?.toFixed(1)}MW）`
+      : ''
     return (
       <Alert
         type="error"
         showIcon
         message="容量校核未通过"
-        description={desc}
+        description={`${failReasons.join('；')}${suggestText ? '。' + suggestText : ''}`}
         action={
           checkResult.suggestedPoint ? (
             <Button size="small" type="primary" onClick={() => handleAdoptSuggestion(record)}>

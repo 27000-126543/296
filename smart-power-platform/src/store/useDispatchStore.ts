@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { DispatchOrder } from '../types'
-import { generateDispatchOrdersFromBalance } from '../utils/mockData'
+import { generateDispatchOrdersFromBalance, generateSeedDispatchOrders } from '../utils/mockData'
 import { usePowerStore } from './usePowerStore'
 import { useNotificationStore } from './useNotificationStore'
 
@@ -14,7 +14,7 @@ interface DispatchState {
 }
 
 export const useDispatchStore = create<DispatchState>((set) => ({
-  orders: generateDispatchOrdersFromBalance(
+  orders: generateSeedDispatchOrders(
     usePowerStore.getState().sources,
     usePowerStore.getState().loadData
   ),
@@ -70,7 +70,7 @@ export const useDispatchStore = create<DispatchState>((set) => ({
       const pending = newOrders.filter((o) => o.status === 'pending')
       if (pending.length > 0) {
         set((state) => ({
-          orders: [...pending, ...state.orders.filter((o) => o.status === 'pending').slice(0, 5)],
+          orders: [...pending, ...state.orders.filter((o) => o.status !== 'pending')],
         }))
         useNotificationStore.getState().addNotification({
           title: '调度指令建议',
@@ -78,9 +78,15 @@ export const useDispatchStore = create<DispatchState>((set) => ({
           type: 'dispatch',
         })
       }
+    } else {
+      useNotificationStore.getState().addNotification({
+        title: '调度检测',
+        content: `当前供需偏差${Math.abs(balance).toFixed(0)}MW（偏差率${Math.abs(rate).toFixed(1)}%），在正常范围内，无需生成调度指令`,
+        type: 'dispatch',
+      })
     }
   },
   refresh: () => {
-    set({ orders: generateDispatchOrdersFromBalance(usePowerStore.getState().sources, usePowerStore.getState().loadData) })
+    set({ orders: generateSeedDispatchOrders(usePowerStore.getState().sources, usePowerStore.getState().loadData) })
   },
 }))

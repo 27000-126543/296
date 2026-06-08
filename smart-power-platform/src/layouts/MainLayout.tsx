@@ -24,15 +24,15 @@ const { Header, Sider, Content } = Layout
 const { Text } = Typography
 
 const MENU_ITEMS = [
-  { key: '/', icon: <DashboardOutlined />, label: '调度大屏', minRole: 0 },
-  { key: '/power', icon: <ThunderboltOutlined />, label: '电源监控', minRole: 1 },
-  { key: '/dispatch', icon: <SendOutlined />, label: '调度指令', minRole: 3 },
-  { key: '/load-price', icon: <DollarOutlined />, label: '负荷电价', minRole: 0 },
-  { key: '/fault', icon: <WarningOutlined />, label: '故障管理', minRole: 1 },
-  { key: '/grid', icon: <ApiOutlined />, label: '并网申请', minRole: 1 },
-  { key: '/storage', icon: <ControlOutlined />, label: '储能电站', minRole: 1 },
-  { key: '/carbon', icon: <CloudOutlined />, label: '碳排放监控', minRole: 1 },
-  { key: '/report', icon: <FileTextOutlined />, label: '报表分析', minRole: 2 },
+  { key: '/', icon: <DashboardOutlined />, label: '调度大屏', allowedRoles: [3, 4] },
+  { key: '/power', icon: <ThunderboltOutlined />, label: '电源监控', allowedRoles: [1, 3, 4] },
+  { key: '/dispatch', icon: <SendOutlined />, label: '调度指令', allowedRoles: [3, 4] },
+  { key: '/load-price', icon: <DollarOutlined />, label: '负荷电价', allowedRoles: [0, 2, 3, 4] },
+  { key: '/fault', icon: <WarningOutlined />, label: '故障管理', allowedRoles: [1, 3, 4] },
+  { key: '/grid', icon: <ApiOutlined />, label: '并网申请', allowedRoles: [3, 4] },
+  { key: '/storage', icon: <ControlOutlined />, label: '储能电站', allowedRoles: [3, 4] },
+  { key: '/carbon', icon: <CloudOutlined />, label: '碳排放监控', allowedRoles: [1, 3, 4] },
+  { key: '/report', icon: <FileTextOutlined />, label: '报表分析', allowedRoles: [4] },
 ]
 
 const DEFAULT_PATHS: Record<number, string> = {
@@ -41,6 +41,18 @@ const DEFAULT_PATHS: Record<number, string> = {
   2: '/load-price',
   3: '/',
   4: '/',
+}
+
+const ROUTE_PERMISSIONS: Record<string, number[]> = {
+  '/': [3, 4],
+  '/power': [1, 3, 4],
+  '/dispatch': [3, 4],
+  '/load-price': [0, 2, 3, 4],
+  '/fault': [1, 3, 4],
+  '/grid': [3, 4],
+  '/storage': [3, 4],
+  '/carbon': [1, 3, 4],
+  '/report': [4],
 }
 
 const NOTIFICATION_TYPE_MAP: Record<string, { color: string; label: string }> = {
@@ -60,14 +72,14 @@ export default function MainLayout() {
   const { token } = theme.useToken()
 
   const userRole = user?.role ?? 0
-  const filteredMenu = MENU_ITEMS.filter((item) => userRole >= item.minRole)
+  const filteredMenu = MENU_ITEMS.filter((item) => item.allowedRoles.includes(userRole))
 
   useEffect(() => {
-    const allowedPaths = filteredMenu.map((m) => m.key)
-    if (!allowedPaths.includes(location.pathname)) {
+    const allowedRoles = ROUTE_PERMISSIONS[location.pathname]
+    if (!allowedRoles || !allowedRoles.includes(userRole)) {
       navigate(DEFAULT_PATHS[userRole] || '/')
     }
-  }, [userRole])
+  }, [location.pathname, userRole])
 
   const notifDropdown = (
     <div style={{ width: 360, background: '#fff', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', maxHeight: 480, overflow: 'auto' }}>

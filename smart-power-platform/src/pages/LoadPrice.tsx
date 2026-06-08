@@ -12,6 +12,7 @@ import {
 import ReactECharts from 'echarts-for-react'
 import { usePowerStore } from '../store/usePowerStore'
 import { useNotificationStore } from '../store/useNotificationStore'
+import { useAuthStore } from '../store/useAuthStore'
 import { generatePriceData } from '../utils/mockData'
 import { formatPower } from '../utils/helpers'
 
@@ -32,7 +33,15 @@ const PEAK_LABEL: Record<string, { label: string; color: string; bg: string }> =
 export default function LoadPrice() {
   const { loadData } = usePowerStore()
   const { addNotification } = useNotificationStore()
+  const { user } = useAuthStore()
   const [priceData, setPriceData] = useState(() => generatePriceData())
+
+  const filteredLoadData = useMemo(() => {
+    if (user?.role === 2 && user?.area) {
+      return loadData.filter((d) => d.area === user.area)
+    }
+    return loadData
+  }, [loadData, user])
 
   const currentHour = new Date().getHours()
   const currentPrice = useMemo(() => {
@@ -163,7 +172,7 @@ export default function LoadPrice() {
   }, [priceData])
 
   const loadBarOption = useMemo(() => {
-    const areas = loadData.map((d) => d.area)
+    const areas = filteredLoadData.map((d) => d.area)
     return {
       tooltip: {
         trigger: 'axis' as const,
@@ -182,26 +191,26 @@ export default function LoadPrice() {
           name: '工业负荷',
           type: 'bar' as const,
           stack: 'total',
-          data: loadData.map((d) => d.industrial),
+          data: filteredLoadData.map((d) => d.industrial),
           itemStyle: { color: '#1890ff', borderRadius: [0, 0, 0, 0] },
         },
         {
           name: '商业负荷',
           type: 'bar' as const,
           stack: 'total',
-          data: loadData.map((d) => d.commercial),
+          data: filteredLoadData.map((d) => d.commercial),
           itemStyle: { color: '#faad14' },
         },
         {
           name: '居民负荷',
           type: 'bar' as const,
           stack: 'total',
-          data: loadData.map((d) => d.residential),
+          data: filteredLoadData.map((d) => d.residential),
           itemStyle: { color: '#52c41a', borderRadius: [4, 4, 0, 0] },
         },
       ],
     }
-  }, [loadData])
+  }, [filteredLoadData])
 
   const loadColumns = [
     { title: '区域', dataIndex: 'area', key: 'area', width: 80 },
@@ -392,7 +401,7 @@ export default function LoadPrice() {
           <Card style={cardStyle} title={<span><BankOutlined style={{ marginRight: 8, color: '#1890ff' }} />各区域负荷数据</span>}>
             <Table
               columns={loadColumns}
-              dataSource={loadData}
+              dataSource={filteredLoadData}
               rowKey="id"
               size="small"
               pagination={false}

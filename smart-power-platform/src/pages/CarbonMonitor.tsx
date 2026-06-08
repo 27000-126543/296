@@ -12,6 +12,7 @@ import {
 import ReactECharts from 'echarts-for-react'
 import { useCarbonStore } from '../store/useCarbonStore'
 import { useNotificationStore } from '../store/useNotificationStore'
+import { useAuthStore } from '../store/useAuthStore'
 import { formatNumber } from '../utils/helpers'
 
 const { Text, Title } = Typography
@@ -25,16 +26,24 @@ const cardStyle: React.CSSProperties = {
 export default function CarbonMonitor() {
   const { data, refresh } = useCarbonStore()
   const { addNotification } = useNotificationStore()
+  const { user } = useAuthStore()
 
-  const warningAreas = useMemo(() => data.filter((d) => d.warning), [data])
+  const filteredData = useMemo(() => {
+    if (user?.role === 1 && user?.area) {
+      return data.filter((d) => d.area === user.area)
+    }
+    return data
+  }, [data, user])
 
-  const totalEmission = useMemo(() => data.reduce((sum, d) => sum + d.emission, 0), [data])
+  const warningAreas = useMemo(() => filteredData.filter((d) => d.warning), [filteredData])
+
+  const totalEmission = useMemo(() => filteredData.reduce((sum, d) => sum + d.emission, 0), [filteredData])
   const avgIntensity = useMemo(() => {
-    if (data.length === 0) return 0
-    return data.reduce((sum, d) => sum + d.intensity, 0) / data.length
-  }, [data])
-  const totalQuota = useMemo(() => data.reduce((sum, d) => sum + d.quota, 0), [data])
-  const totalUsed = useMemo(() => data.reduce((sum, d) => sum + d.used, 0), [data])
+    if (filteredData.length === 0) return 0
+    return filteredData.reduce((sum, d) => sum + d.intensity, 0) / filteredData.length
+  }, [filteredData])
+  const totalQuota = useMemo(() => filteredData.reduce((sum, d) => sum + d.quota, 0), [filteredData])
+  const totalUsed = useMemo(() => filteredData.reduce((sum, d) => sum + d.used, 0), [filteredData])
   const quotaUtilRate = useMemo(() => {
     if (totalQuota === 0) return 0
     return (totalUsed / totalQuota) * 100
@@ -47,7 +56,7 @@ export default function CarbonMonitor() {
     grid: { top: 40, right: 20, bottom: 30, left: 60 },
     xAxis: {
       type: 'category' as const,
-      data: data.map((d) => d.area),
+      data: filteredData.map((d) => d.area),
       axisLabel: { fontSize: 12 },
     },
     yAxis: {
@@ -63,20 +72,20 @@ export default function CarbonMonitor() {
         itemStyle: {
           borderRadius: [4, 4, 0, 0],
           color: (params: { dataIndex: number }) => {
-            return data[params.dataIndex]?.warning ? '#ff4d4f' : '#1890ff'
+            return filteredData[params.dataIndex]?.warning ? '#ff4d4f' : '#1890ff'
           },
         },
-        data: data.map((d) => d.emission),
+        data: filteredData.map((d) => d.emission),
       },
       {
         name: '配额',
         type: 'bar' as const,
         barMaxWidth: 36,
         itemStyle: { color: '#95de64', borderRadius: [4, 4, 0, 0] },
-        data: data.map((d) => d.quota),
+        data: filteredData.map((d) => d.quota),
       },
     ],
-  }), [data])
+  }), [filteredData])
 
   const gaugeChartOption = useMemo(() => ({
     series: [
@@ -161,7 +170,7 @@ export default function CarbonMonitor() {
       title: '利用率',
       key: 'utilRate',
       width: 160,
-      render: (_: unknown, record: (typeof data)[0]) => {
+      render: (_: unknown, record: (typeof filteredData)[0]) => {
         const rate = record.quota > 0 ? (record.used / record.quota) * 100 : 0
         return (
           <Progress
@@ -176,7 +185,7 @@ export default function CarbonMonitor() {
       title: '预警状态',
       key: 'warning',
       width: 100,
-      render: (_: unknown, record: (typeof data)[0]) =>
+      render: (_: unknown, record: (typeof filteredData)[0]) =>
         record.warning ? <Tag color="red">超配额</Tag> : <Tag color="green">正常</Tag>,
     },
   ]
@@ -351,7 +360,7 @@ export default function CarbonMonitor() {
           >
             <Table
               columns={columns}
-              dataSource={data}
+              dataSource={filteredData}
               rowKey="id"
               size="middle"
               pagination={{ pageSize: 10, showTotal: (total) => `共 ${total} 条` }}

@@ -18,13 +18,13 @@ export const useStorageStore = create<StorageState>((set) => ({
         if (s.id !== id) return s
         const chargeRate = mode === 'charging' ? Math.round((5 + Math.random() * 25) * 10) / 10 : 0
         const dischargeRate = mode === 'discharging' ? Math.round((5 + Math.random() * 25) * 10) / 10 : 0
-        return { ...s, mode, chargeRate, dischargeRate, strategy: 'manual' }
+        return { ...s, mode, chargeRate, dischargeRate, strategy: 'manual', manualOverride: s.strategy === 'auto' }
       }),
     }))
   },
   setStrategy: (id, strategy) => {
     set((state) => ({
-      stations: state.stations.map((s) => (s.id === id ? { ...s, strategy } : s)),
+      stations: state.stations.map((s) => (s.id === id ? { ...s, strategy, manualOverride: false } : s)),
     }))
     if (strategy === 'auto') {
       const station = useStorageStore.getState().stations.find((s) => s.id === id)
@@ -72,6 +72,7 @@ export const useStorageStore = create<StorageState>((set) => ({
           revenue: totalRevenue,
           participants,
           strategy: 'auto',
+          manualOverride: false,
           mode,
           chargeRate: mode === 'charging' ? (planNow?.rate || 0) : 0,
           dischargeRate: mode === 'discharging' ? (planNow?.rate || 0) : 0,

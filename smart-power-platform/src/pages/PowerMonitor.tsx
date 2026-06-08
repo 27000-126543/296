@@ -60,8 +60,8 @@ export default function PowerMonitor() {
 
   const filteredSources = useMemo(() => {
     let result = sources
-    if (user?.role === 1 && user?.plantId) {
-      result = result.filter((s) => s.id === user.plantId)
+    if (user?.role === 1) {
+      result = result.filter((s) => s.id === user.plantId || s.area === user.area)
     }
     if (areaFilter) {
       result = result.filter((s) => s.area === areaFilter)

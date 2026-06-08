@@ -107,34 +107,42 @@ export function generateDispatchOrdersFromBalance(sources: PowerSource[], loadDa
     })
   }
 
-  const statuses: DispatchOrder['status'][] = ['pending', 'confirmed', 'executing', 'completed', 'rejected']
-  for (let i = orders.length; i < 6; i++) {
-    const src = sources[Math.floor(Math.random() * sources.length)]
-    const status = statuses[Math.floor(Math.random() * statuses.length)]
-    const isDeficit2 = Math.random() > 0.5
+  return orders
+}
+
+export function generateSeedDispatchOrders(sources: PowerSource[], loadData: LoadData[]): DispatchOrder[] {
+  const now = dayjs()
+  const orders = generateDispatchOrdersFromBalance(sources, loadData)
+  const seedStatuses: DispatchOrder['status'][] = ['executing', 'completed', 'completed', 'rejected']
+  const onlineSources = sources.filter((s) => s.status === 'online')
+  seedStatuses.forEach((status, i) => {
+    const src = onlineSources[i % onlineSources.length]
+    if (!src) return
+    const isDeficit = Math.random() > 0.5
     const targetOutput = Math.round(src.capacity * rand(0.3, 0.9) * 10) / 10
     const areaLoad = loadData.find((l) => l.area === src.area)
     const areaGen = sources.filter((s) => s.area === src.area && s.status === 'online').reduce((sum, s) => sum + s.currentOutput, 0)
     const areaBalance = areaGen - (areaLoad?.total || 0)
-
     orders.push({
-      id: `DO${String(i + 1).padStart(4, '0')}`,
-      type: isDeficit2 ? 'increase' : 'decrease',
+      id: `DO${String(orders.length + i + 1).padStart(4, '0')}`,
+      type: isDeficit ? 'increase' : 'decrease',
       sourceId: src.id,
       sourceName: src.name,
       targetOutput,
-      currentOutput: src.currentOutput,
-      beforeOutput: status !== 'pending' ? Math.round(src.currentOutput * rand(0.7, 1.1) * 10) / 10 : src.currentOutput,
-      reason: `供需偏差${rand(50, 200)}MW，需调整${src.name}出力至${targetOutput}MW`,
+      currentOutput: status === 'completed' ? targetOutput : src.currentOutput,
+      beforeOutput: Math.round(src.currentOutput * rand(0.7, 1.1) * 10) / 10,
+      reason: `供需偏差${rand(50, 200).toFixed(0)}MW，需调整${src.name}出力至${targetOutput}MW`,
       status,
-      createdAt: now.subtract(Math.floor(Math.random() * 60), 'minute').format('YYYY-MM-DD HH:mm:ss'),
+      createdAt: now.subtract(Math.floor(Math.random() * 60 + 10), 'minute').format('YYYY-MM-DD HH:mm:ss'),
+      confirmedAt: status !== 'pending' ? now.subtract(Math.floor(Math.random() * 50 + 5), 'minute').format('YYYY-MM-DD HH:mm:ss') : undefined,
+      completedAt: status === 'completed' ? now.subtract(Math.floor(Math.random() * 30), 'minute').format('YYYY-MM-DD HH:mm:ss') : undefined,
       operator: status !== 'pending' ? '调度员张伟' : undefined,
       area: src.area,
       deviation: Math.round(Math.abs(targetOutput - src.currentOutput) * 10) / 10,
       balanceBefore: Math.round(areaBalance * 10) / 10,
-      balanceAfter: status !== 'pending' && status !== 'rejected' ? Math.round((areaBalance + (isDeficit2 ? 1 : -1) * Math.abs(targetOutput - src.currentOutput)) * 10) / 10 : undefined,
+      balanceAfter: status !== 'pending' && status !== 'rejected' ? Math.round((areaBalance + (isDeficit ? 1 : -1) * Math.abs(targetOutput - src.currentOutput)) * 10) / 10 : undefined,
     })
-  }
+  })
   return orders
 }
 
@@ -184,7 +192,17 @@ export function checkCapacity(capacity: number, plannedOutput: number[], selecte
   const peakPlan = Math.max(...plannedOutput)
   const point = CONNECTION_POINTS.find((p) => p.name === selectedPoint)
   const pointRemaining = point ? point.maxCapacity - point.usedCapacity : 0
-  const passed = peakPlan <= pointRemaining && capacity <= pointRemaining
+  const capacityOver = capacity > pointRemaining
+  const peakOver = peakPlan > pointRemaining
+  const passed = !capacityOver && !peakOver
+
+  const reasons: string[] = []
+  if (capacityOver) {
+    reasons.push(`申请容量${capacity.toFixed(1)}MW超过并网点剩余容量${pointRemaining.toFixed(1)}MW`)
+  }
+  if (peakOver) {
+    reasons.push(`计划峰值${peakPlan.toFixed(1)}MW超过并网点剩余容量${pointRemaining.toFixed(1)}MW`)
+  }
 
   let suggestedPoint: string | undefined
   let suggestedPointRemaining: number | undefined
@@ -202,10 +220,13 @@ export function checkCapacity(capacity: number, plannedOutput: number[], selecte
   return {
     passed,
     reason: passed
-      ? `计划峰值${peakPlan.toFixed(1)}MW ≤ 并网点剩余容量${pointRemaining.toFixed(1)}MW，校核通过`
-      : `计划峰值${peakPlan.toFixed(1)}MW > 并网点剩余容量${pointRemaining.toFixed(1)}MW，校核不通过`,
+      ? `申请容量${capacity.toFixed(1)}MW ≤ 剩余容量${pointRemaining.toFixed(1)}MW，计划峰值${peakPlan.toFixed(1)}MW ≤ 剩余容量${pointRemaining.toFixed(1)}MW，校核通过`
+      : reasons.join('；'),
     peakPlan,
+    capacityOver,
+    peakOver,
     pointRemaining,
+    capacityValue: capacity,
     suggestedPoint,
     suggestedPointRemaining,
   }
@@ -293,6 +314,7 @@ export function generateStorageStations(): StorageStation[] {
       participants,
       dailyPlan,
       estimatedRevenue,
+      manualOverride: false,
     }
   })
 }

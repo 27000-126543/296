@@ -59,7 +59,10 @@ export interface CapacityCheckResult {
   passed: boolean
   reason: string
   peakPlan: number
+  capacityOver: boolean
+  peakOver: boolean
   pointRemaining: number
+  capacityValue: number
   suggestedPoint?: string
   suggestedPointRemaining?: number
 }
@@ -103,6 +106,7 @@ export interface StorageStation {
   participants: { name: string; share: number; revenue: number }[]
   dailyPlan: ChargeDischargePlan[]
   estimatedRevenue: number
+  manualOverride: boolean
 }
 
 export interface CarbonData {
