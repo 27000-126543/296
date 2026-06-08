@@ -25,12 +25,17 @@ export interface DispatchOrder {
   sourceName: string
   targetOutput: number
   currentOutput: number
+  beforeOutput: number
   reason: string
   status: 'pending' | 'confirmed' | 'executing' | 'completed' | 'rejected'
   createdAt: string
   confirmedAt?: string
   completedAt?: string
   operator?: string
+  balanceBefore?: number
+  balanceAfter?: number
+  area?: string
+  deviation?: number
 }
 
 export interface FaultRecord {
@@ -40,12 +45,23 @@ export interface FaultRecord {
   type: string
   level: 'critical' | 'major' | 'minor'
   description: string
-  status: 'pending' | 'assigned' | 'repairing' | 'resolved'
+  status: 'pending' | 'assigned' | 'accepted' | 'repairing' | 'resolved'
   createdAt: string
   assignedTeam?: string
   assignedAt?: string
+  acceptedAt?: string
+  repairingAt?: string
   resolvedAt?: string
   escalated: boolean
+}
+
+export interface CapacityCheckResult {
+  passed: boolean
+  reason: string
+  peakPlan: number
+  pointRemaining: number
+  suggestedPoint?: string
+  suggestedPointRemaining?: number
 }
 
 export interface GridApplication {
@@ -63,6 +79,15 @@ export interface GridApplication {
   gmApprovedAt?: string
   rejectedAt?: string
   capacityVerified: boolean
+  capacityCheckResult?: CapacityCheckResult
+}
+
+export interface ChargeDischargePlan {
+  hour: number
+  action: 'charge' | 'discharge' | 'standby'
+  rate: number
+  price: number
+  revenue: number
 }
 
 export interface StorageStation {
@@ -76,6 +101,8 @@ export interface StorageStation {
   dischargeRate: number
   revenue: number
   participants: { name: string; share: number; revenue: number }[]
+  dailyPlan: ChargeDischargePlan[]
+  estimatedRevenue: number
 }
 
 export interface CarbonData {
@@ -125,4 +152,12 @@ export const SOURCE_TYPES = [
   { value: 'hydro', label: '水电' },
   { value: 'wind', label: '风电' },
   { value: 'solar', label: '光伏' },
+]
+
+export const CONNECTION_POINTS = [
+  { name: '110kV东郊变', maxCapacity: 500, usedCapacity: 320 },
+  { name: '220kV西城变', maxCapacity: 800, usedCapacity: 450 },
+  { name: '110kV南湖变', maxCapacity: 500, usedCapacity: 380 },
+  { name: '220kV北山变', maxCapacity: 800, usedCapacity: 200 },
+  { name: '110kV中心变', maxCapacity: 500, usedCapacity: 410 },
 ]
