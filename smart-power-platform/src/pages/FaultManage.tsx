@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Card, Row, Col, Table, Tag, Button, Statistic, Typography, Modal, Select, Space, message } from 'antd'
+import { Card, Row, Col, Table, Tag, Button, Statistic, Typography, Modal, Select, Space, message, Timeline } from 'antd'
 import {
   WarningOutlined,
   ClockCircleOutlined,
@@ -30,14 +30,46 @@ const LEVEL_CONFIG: Record<FaultRecord['level'], { label: string; color: string 
 const STATUS_CONFIG: Record<FaultRecord['status'], { label: string; color: string }> = {
   pending: { label: '待分配', color: 'orange' },
   assigned: { label: '已分配', color: 'blue' },
+  accepted: { label: '已接单', color: 'cyan' },
   repairing: { label: '抢修中', color: 'processing' },
   resolved: { label: '已修复', color: 'green' },
 }
 
 const TEAMS = ['抢修班组A', '抢修班组B', '抢修班组C', '抢修班组D', '抢修班组E']
 
+function isTimedOut(record: FaultRecord): boolean {
+  if (record.escalated || record.status === 'resolved') return record.escalated
+  const now = Date.now()
+  if (record.status === 'pending') {
+    return now - new Date(record.createdAt).getTime() > 30 * 60 * 1000
+  }
+  if (record.status === 'assigned' && record.assignedAt) {
+    return now - new Date(record.assignedAt).getTime() > 30 * 60 * 1000
+  }
+  return false
+}
+
+function buildTimeline(record: FaultRecord) {
+  const items: { label: string; time: string; color: string }[] = [
+    { label: '故障创建', time: record.createdAt, color: 'orange' },
+  ]
+  if (record.assignedAt) {
+    items.push({ label: '已分配班组', time: record.assignedAt, color: 'blue' })
+  }
+  if (record.acceptedAt) {
+    items.push({ label: '已接单', time: record.acceptedAt, color: 'cyan' })
+  }
+  if (record.repairingAt) {
+    items.push({ label: '开始抢修', time: record.repairingAt, color: 'processing' })
+  }
+  if (record.resolvedAt) {
+    items.push({ label: '已修复', time: record.resolvedAt, color: 'green' })
+  }
+  return items
+}
+
 export default function FaultManage() {
-  const { records, assignTeam, resolveFault, escalateFault, checkTimeout, refresh } = useFaultStore()
+  const { records, assignTeam, acceptOrder, startRepair, resolveFault, escalateFault, checkTimeout, refresh } = useFaultStore()
   const user = useAuthStore((s) => s.user)
   const [assignModalVisible, setAssignModalVisible] = useState(false)
   const [selectedFault, setSelectedFault] = useState<FaultRecord | null>(null)
@@ -54,7 +86,7 @@ export default function FaultManage() {
   }, [checkTimeout])
 
   const totalCount = records.length
-  const pendingCount = records.filter((r) => r.status === 'pending' || r.status === 'assigned').length
+  const pendingCount = records.filter((r) => r.status === 'pending' || r.status === 'assigned' || r.status === 'accepted').length
   const repairingCount = records.filter((r) => r.status === 'repairing').length
   const resolvedCount = records.filter((r) => r.status === 'resolved').length
   const escalatedCount = records.filter((r) => r.escalated).length
@@ -66,6 +98,16 @@ export default function FaultManage() {
     setAssignModalVisible(false)
     setSelectedFault(null)
     setSelectedTeam(undefined)
+  }
+
+  const handleAcceptOrder = (id: string) => {
+    acceptOrder(id)
+    message.success('已接单')
+  }
+
+  const handleStartRepair = (id: string) => {
+    startRepair(id)
+    message.success('已开始抢修')
   }
 
   const handleResolve = (id: string) => {
@@ -177,9 +219,14 @@ export default function FaultManage() {
       dataIndex: 'status',
       key: 'status',
       width: 100,
-      render: (v: FaultRecord['status']) => {
+      render: (v: FaultRecord['status'], record: FaultRecord) => {
         const cfg = STATUS_CONFIG[v]
-        return <Tag color={cfg.color}>{cfg.label}</Tag>
+        return (
+          <Space size={4}>
+            <Tag color={cfg.color}>{cfg.label}</Tag>
+            {isTimedOut(record) && <Tag color="red">超时升级</Tag>}
+          </Space>
+        )
       },
     },
     {
@@ -197,16 +244,6 @@ export default function FaultManage() {
       render: (v: string) => formatDate(v),
     },
     {
-      title: '升级标记',
-      dataIndex: 'escalated',
-      key: 'escalated',
-      width: 100,
-      render: (v: boolean, _record: FaultRecord) => {
-        if (!v) return '-'
-        return <Tag color="red">超时升级</Tag>
-      },
-    },
-    {
       title: '操作',
       key: 'action',
       width: canOperate ? 260 : 60,
@@ -218,12 +255,22 @@ export default function FaultManage() {
               分配班组
             </Button>
           )}
-          {canOperate && record.status === 'repairing' && (
-            <Button type="primary" size="small" style={{ background: '#52c41a', borderColor: '#52c41a' }} onClick={() => handleResolve(record.id)}>
-              标记修复
+          {canOperate && record.status === 'assigned' && (
+            <Button type="primary" size="small" onClick={() => handleAcceptOrder(record.id)}>
+              接单
             </Button>
           )}
-          {canOperate && record.escalated && record.status !== 'resolved' && (
+          {canOperate && record.status === 'accepted' && (
+            <Button type="primary" size="small" style={{ background: '#13c2c2', borderColor: '#13c2c2' }} onClick={() => handleStartRepair(record.id)}>
+              开始抢修
+            </Button>
+          )}
+          {canOperate && record.status === 'repairing' && (
+            <Button type="primary" size="small" style={{ background: '#52c41a', borderColor: '#52c41a' }} onClick={() => handleResolve(record.id)}>
+              完成修复
+            </Button>
+          )}
+          {canOperate && isTimedOut(record) && record.status !== 'resolved' && (
             <Button danger size="small" onClick={() => handleEscalate(record.id)}>
               升级主管
             </Button>
@@ -324,6 +371,27 @@ export default function FaultManage() {
           scroll={{ x: 1400 }}
           pagination={{ pageSize: 10, showSizeChanger: true, showTotal: (total) => `共 ${total} 条` }}
           rowClassName={(record) => (record.escalated && record.status !== 'resolved' ? 'ant-table-row-escalated' : '')}
+          expandable={{
+            expandedRowRender: (record: FaultRecord) => {
+              const timelineItems = buildTimeline(record)
+              return (
+                <div style={{ padding: '8px 0' }}>
+                  <Text strong style={{ marginBottom: 12, display: 'block' }}>状态流转时间线</Text>
+                  <Timeline
+                    items={timelineItems.map((item) => ({
+                      color: item.color,
+                      children: (
+                        <Space>
+                          <Text>{item.label}</Text>
+                          <Text type="secondary">{formatDate(item.time)}</Text>
+                        </Space>
+                      ),
+                    }))}
+                  />
+                </div>
+              )
+            },
+          }}
         />
       </Card>
 

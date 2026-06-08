@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { Layout, Menu, Avatar, Dropdown, Badge, List, Button, Select, Typography, theme } from 'antd'
 import {
@@ -25,7 +25,7 @@ const { Text } = Typography
 
 const MENU_ITEMS = [
   { key: '/', icon: <DashboardOutlined />, label: '调度大屏', minRole: 0 },
-  { key: '/power', icon: <ThunderboltOutlined />, label: '电源监控', minRole: 0 },
+  { key: '/power', icon: <ThunderboltOutlined />, label: '电源监控', minRole: 1 },
   { key: '/dispatch', icon: <SendOutlined />, label: '调度指令', minRole: 3 },
   { key: '/load-price', icon: <DollarOutlined />, label: '负荷电价', minRole: 0 },
   { key: '/fault', icon: <WarningOutlined />, label: '故障管理', minRole: 1 },
@@ -34,6 +34,14 @@ const MENU_ITEMS = [
   { key: '/carbon', icon: <CloudOutlined />, label: '碳排放监控', minRole: 1 },
   { key: '/report', icon: <FileTextOutlined />, label: '报表分析', minRole: 2 },
 ]
+
+const DEFAULT_PATHS: Record<number, string> = {
+  0: '/load-price',
+  1: '/power',
+  2: '/load-price',
+  3: '/',
+  4: '/',
+}
 
 const NOTIFICATION_TYPE_MAP: Record<string, { color: string; label: string }> = {
   dispatch: { color: '#1890ff', label: '调度' },
@@ -51,7 +59,15 @@ export default function MainLayout() {
   const { notifications, markRead, markAllRead, unreadCount } = useNotificationStore()
   const { token } = theme.useToken()
 
-  const filteredMenu = MENU_ITEMS.filter((item) => (user?.role ?? 0) >= item.minRole)
+  const userRole = user?.role ?? 0
+  const filteredMenu = MENU_ITEMS.filter((item) => userRole >= item.minRole)
+
+  useEffect(() => {
+    const allowedPaths = filteredMenu.map((m) => m.key)
+    if (!allowedPaths.includes(location.pathname)) {
+      navigate(DEFAULT_PATHS[userRole] || '/')
+    }
+  }, [userRole])
 
   const notifDropdown = (
     <div style={{ width: 360, background: '#fff', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', maxHeight: 480, overflow: 'auto' }}>
@@ -92,7 +108,7 @@ export default function MainLayout() {
       </div>
       <Select
         style={{ width: '100%' }}
-        value={user?.role ?? 4}
+        value={userRole}
         onChange={(v) => switchRole(v as 0 | 1 | 2 | 3 | 4)}
         options={Object.entries(USER_ROLES).map(([k, v]) => ({ value: Number(k), label: `${v.label} - ${v.description}` }))}
       />
@@ -167,7 +183,7 @@ export default function MainLayout() {
                 <div>
                   <Text strong style={{ fontSize: 13 }}>{user?.username}</Text>
                   <br />
-                  <Text type="secondary" style={{ fontSize: 11 }}>{USER_ROLES[user?.role ?? 0]?.label}</Text>
+                  <Text type="secondary" style={{ fontSize: 11 }}>{USER_ROLES[userRole]?.label}</Text>
                 </div>
               </div>
             </Dropdown>

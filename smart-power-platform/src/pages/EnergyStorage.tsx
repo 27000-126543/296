@@ -8,10 +8,14 @@ import {
   SwapOutlined,
   ExpandOutlined,
   ShrinkOutlined,
+  RobotOutlined,
+  ScheduleOutlined,
 } from '@ant-design/icons'
 import ReactECharts from 'echarts-for-react'
 import { useStorageStore } from '../store/useStorageStore'
+import { useAuthStore } from '../store/useAuthStore'
 import { formatPower } from '../utils/helpers'
+import type { ChargeDischargePlan } from '../types'
 
 const { Text, Title } = Typography
 
@@ -27,13 +31,141 @@ const modeConfig: Record<string, { label: string; color: string }> = {
   standby: { label: '待机', color: '#8c8c8c' },
 }
 
+const actionConfig: Record<string, { label: string; color: string }> = {
+  charge: { label: '充电', color: '#1890ff' },
+  discharge: { label: '放电', color: '#52c41a' },
+  standby: { label: '待机', color: '#8c8c8c' },
+}
+
+function buildPlanChartOption(plan: ChargeDischargePlan[]) {
+  const hours = plan.map((p) => `${p.hour}:00`)
+  const barData = plan.map((p) => p.rate)
+  const barColors = plan.map((p) => {
+    if (p.action === 'charge') return '#1890ff'
+    if (p.action === 'discharge') return '#52c41a'
+    return '#d9d9d9'
+  })
+  const priceData = plan.map((p) => p.price)
+
+  return {
+    tooltip: {
+      trigger: 'axis' as const,
+      axisPointer: { type: 'shadow' as const },
+      formatter: (params: any[]) => {
+        let tip = `${params[0].axisValue}<br/>`
+        params.forEach((p: any) => {
+          if (p.seriesName === '功率') {
+            const idx = p.dataIndex
+            const action = plan[idx].action
+            tip += `${p.marker} ${actionConfig[action].label}功率: ${p.value}MW<br/>`
+          } else {
+            tip += `${p.marker} ${p.seriesName}: ${p.value}元/kWh<br/>`
+          }
+        })
+        return tip
+      },
+    },
+    legend: { data: ['功率', '电价'], bottom: 0, textStyle: { fontSize: 11 } },
+    grid: { top: 20, right: 50, bottom: 40, left: 50 },
+    xAxis: {
+      type: 'category' as const,
+      data: hours,
+      axisLabel: { fontSize: 10, interval: 2 },
+    },
+    yAxis: [
+      {
+        type: 'value' as const,
+        name: 'MW',
+        axisLabel: { fontSize: 10 },
+        nameTextStyle: { fontSize: 10 },
+      },
+      {
+        type: 'value' as const,
+        name: '元/kWh',
+        axisLabel: { fontSize: 10 },
+        nameTextStyle: { fontSize: 10 },
+        splitLine: { show: false },
+      },
+    ],
+    series: [
+      {
+        name: '功率',
+        type: 'bar' as const,
+        data: barData.map((v, i) => ({
+          value: v,
+          itemStyle: { color: barColors[i], borderRadius: [3, 3, 0, 0] },
+        })),
+        barMaxWidth: 16,
+        yAxisIndex: 0,
+      },
+      {
+        name: '电价',
+        type: 'line' as const,
+        data: priceData,
+        yAxisIndex: 1,
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 4,
+        lineStyle: { color: '#faad14', width: 2 },
+        itemStyle: { color: '#faad14' },
+      },
+    ],
+  }
+}
+
+const planColumns = [
+  {
+    title: '时段',
+    dataIndex: 'hour',
+    key: 'hour',
+    width: 70,
+    render: (v: number) => `${String(v).padStart(2, '0')}:00`,
+  },
+  {
+    title: '动作',
+    dataIndex: 'action',
+    key: 'action',
+    width: 70,
+    render: (v: string) => <Tag color={actionConfig[v]?.color}>{actionConfig[v]?.label}</Tag>,
+  },
+  {
+    title: '功率(MW)',
+    dataIndex: 'rate',
+    key: 'rate',
+    width: 90,
+    render: (v: number) => v.toFixed(1),
+  },
+  {
+    title: '电价(元/kWh)',
+    dataIndex: 'price',
+    key: 'price',
+    width: 110,
+    render: (v: number) => v.toFixed(2),
+  },
+  {
+    title: '收益(元)',
+    dataIndex: 'revenue',
+    key: 'revenue',
+    width: 100,
+    render: (v: number) => {
+      const color = v > 0 ? '#52c41a' : v < 0 ? '#ff4d4f' : '#8c8c8c'
+      return <span style={{ color }}>{v > 0 ? '+' : ''}{v.toFixed(2)}</span>
+    },
+  },
+]
+
 export default function EnergyStorage() {
-  const { stations, setMode, setStrategy, refresh } = useStorageStore()
+  const { stations, setMode, setStrategy, applyAutoPlan, refresh } = useStorageStore()
+  const { user } = useAuthStore()
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set())
+  const [planPage, setPlanPage] = useState<Record<string, number>>({})
+
+  const canOperate = (user?.role ?? 0) >= 3
 
   const totalCapacity = stations.reduce((sum, s) => sum + s.capacity, 0)
   const totalEnergy = stations.reduce((sum, s) => sum + s.currentEnergy, 0)
   const totalRevenue = stations.reduce((sum, s) => sum + s.revenue, 0)
+  const totalEstimatedRevenue = stations.reduce((sum, s) => sum + s.estimatedRevenue, 0)
 
   const toggleExpand = (id: string) => {
     setExpandedKeys((prev) => {
@@ -53,6 +185,11 @@ export default function EnergyStorage() {
     const strategy = checked ? 'auto' : 'manual'
     setStrategy(id, strategy)
     message.success(`已切换为${strategy === 'auto' ? '自动' : '手动'}策略`)
+  }
+
+  const handleApplyPlan = (id: string) => {
+    applyAutoPlan(id)
+    message.success('充放电计划已生成并应用')
   }
 
   const rateBarOption = {
@@ -88,9 +225,24 @@ export default function EnergyStorage() {
   }
 
   const allParticipants = stations.flatMap((s) => s.participants)
-  const participantMap = new Map<string, number>()
+  const participantMap = new Map<string, { revenue: number; planRevenue: number }>()
   allParticipants.forEach((p) => {
-    participantMap.set(p.name, (participantMap.get(p.name) || 0) + p.revenue)
+    const existing = participantMap.get(p.name)
+    if (existing) {
+      existing.revenue += p.revenue
+    } else {
+      participantMap.set(p.name, { revenue: p.revenue, planRevenue: 0 })
+    }
+  })
+  stations.forEach((s) => {
+    const totalShare = s.participants.reduce((sum, p) => sum + p.share, 0)
+    s.participants.forEach((p) => {
+      const planRev = Math.round((Math.abs(s.estimatedRevenue) * p.share / totalShare) * 100) / 100
+      const existing = participantMap.get(p.name)
+      if (existing) {
+        existing.planRevenue += planRev
+      }
+    })
   })
   const pieColors = ['#1890ff', '#52c41a', '#faad14', '#722ed1', '#ff4d4f', '#13c2c2', '#eb2f96', '#2f54eb']
 
@@ -103,9 +255,9 @@ export default function EnergyStorage() {
         radius: ['40%', '70%'],
         avoidLabelOverlap: false,
         label: { show: true, formatter: '{b}\n{d}%', fontSize: 11 },
-        data: Array.from(participantMap.entries()).map(([name, value], i) => ({
+        data: Array.from(participantMap.entries()).map(([name, data], i) => ({
           name,
-          value: Math.round(value * 100) / 100,
+          value: Math.round(data.revenue * 100) / 100,
           itemStyle: { color: pieColors[i % pieColors.length] },
         })),
       },
@@ -124,6 +276,12 @@ export default function EnergyStorage() {
       title: '收益金额',
       dataIndex: 'revenue',
       key: 'revenue',
+      render: (v: number) => `${v.toFixed(2)}万元`,
+    },
+    {
+      title: '计划日收益',
+      dataIndex: 'planRevenue',
+      key: 'planRevenue',
       render: (v: number) => `${v.toFixed(2)}万元`,
     },
   ]
@@ -185,30 +343,69 @@ export default function EnergyStorage() {
           const energyPercent = Math.round((station.currentEnergy / station.capacity) * 100)
           const isExpanded = expandedKeys.has(station.id)
           const modeInfo = modeConfig[station.mode]
+          const isAuto = station.strategy === 'auto'
+
+          const chargingCost = station.dailyPlan
+            .filter((p) => p.action === 'charge')
+            .reduce((sum, p) => sum + Math.abs(p.revenue), 0)
+          const dischargingRevenue = station.dailyPlan
+            .filter((p) => p.action === 'discharge')
+            .reduce((sum, p) => sum + p.revenue, 0)
+
+          const currentPage = planPage[station.id] || 1
 
           return (
-            <Col xs={24} lg={12} key={station.id}>
+            <Col xs={24} key={station.id}>
               <Card
-                style={cardStyle}
+                style={{ ...cardStyle, height: 'auto' }}
                 title={
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>{station.name}</span>
-                    <Tag color={station.mode === 'charging' ? 'blue' : station.mode === 'discharging' ? 'green' : 'default'}>
-                      {modeInfo.label}
-                    </Tag>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                    <Space>
+                      <span style={{ fontWeight: 600 }}>{station.name}</span>
+                      <Tag color={isAuto ? 'blue' : 'default'}>
+                        {isAuto ? <RobotOutlined style={{ marginRight: 4 }} /> : null}
+                        {isAuto ? '自动策略运行中' : '手动控制'}
+                      </Tag>
+                      <Tag color={modeInfo.color}>{modeInfo.label}</Tag>
+                    </Space>
+                    <Space>
+                      <Statistic
+                        title="预计日收益"
+                        value={station.estimatedRevenue.toFixed(2)}
+                        suffix="元"
+                        valueStyle={{ color: station.estimatedRevenue >= 0 ? '#52c41a' : '#ff4d4f', fontSize: 18 }}
+                        style={{ marginRight: 8 }}
+                      />
+                      <Button
+                        type="primary"
+                        size="small"
+                        icon={<ScheduleOutlined />}
+                        onClick={() => handleApplyPlan(station.id)}
+                      >
+                        生成充放电计划
+                      </Button>
+                    </Space>
                   </div>
                 }
               >
                 <Row gutter={[16, 12]}>
-                  <Col span={12}>
+                  <Col span={6}>
                     <Text type="secondary">装机容量</Text>
                     <div><Text strong>{formatPower(station.capacity)}</Text></div>
                   </Col>
-                  <Col span={12}>
+                  <Col span={6}>
                     <Text type="secondary">当前收益</Text>
                     <div><Text strong style={{ color: '#faad14' }}>{station.revenue.toFixed(2)}万元</Text></div>
                   </Col>
-                  <Col span={24}>
+                  <Col span={6}>
+                    <Text type="secondary">充电成本</Text>
+                    <div><Text strong style={{ color: '#ff4d4f' }}>-{chargingCost.toFixed(2)}元</Text></div>
+                  </Col>
+                  <Col span={6}>
+                    <Text type="secondary">放电收益</Text>
+                    <div><Text strong style={{ color: '#52c41a' }}>+{dischargingRevenue.toFixed(2)}元</Text></div>
+                  </Col>
+                  <Col span={12}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                       <Text type="secondary">当前电量</Text>
                       <Text>{formatPower(station.currentEnergy)} / {formatPower(station.capacity)}</Text>
@@ -219,11 +416,11 @@ export default function EnergyStorage() {
                       size="small"
                     />
                   </Col>
-                  <Col span={12}>
+                  <Col span={6}>
                     <Text type="secondary">充电功率</Text>
                     <div><Text strong style={{ color: '#1890ff' }}>{station.chargeRate.toFixed(1)}MW</Text></div>
                   </Col>
-                  <Col span={12}>
+                  <Col span={6}>
                     <Text type="secondary">放电功率</Text>
                     <div><Text strong style={{ color: '#52c41a' }}>{station.dischargeRate.toFixed(1)}MW</Text></div>
                   </Col>
@@ -237,9 +434,10 @@ export default function EnergyStorage() {
                           onChange={(e) => handleModeChange(station.id, e.target.value)}
                           optionType="button"
                           buttonStyle="solid"
+                          disabled={isAuto || !canOperate}
                         >
-                          <Radio.Button value="charging" style={{ color: station.mode === 'charging' ? '#1890ff' : undefined }}>充电</Radio.Button>
-                          <Radio.Button value="discharging" style={{ color: station.mode === 'discharging' ? '#52c41a' : undefined }}>放电</Radio.Button>
+                          <Radio.Button value="charging" style={{ color: !isAuto && station.mode === 'charging' ? '#1890ff' : undefined }}>充电</Radio.Button>
+                          <Radio.Button value="discharging" style={{ color: !isAuto && station.mode === 'discharging' ? '#52c41a' : undefined }}>放电</Radio.Button>
                           <Radio.Button value="standby">待机</Radio.Button>
                         </Radio.Group>
                       </Space>
@@ -247,14 +445,39 @@ export default function EnergyStorage() {
                         <Text type="secondary">自动策略</Text>
                         <Switch
                           size="small"
-                          checked={station.strategy === 'auto'}
+                          checked={isAuto}
                           onChange={(checked) => handleStrategyChange(station.id, checked)}
                           checkedChildren="自动"
                           unCheckedChildren="手动"
+                          disabled={!canOperate}
                         />
                       </Space>
                     </div>
                   </Col>
+
+                  <Col span={24}>
+                    <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 12, marginTop: 4 }}>
+                      <Text strong style={{ fontSize: 13, marginBottom: 8, display: 'block' }}>每日充放电计划</Text>
+                      <ReactECharts option={buildPlanChartOption(station.dailyPlan)} style={{ height: 220 }} />
+                    </div>
+                  </Col>
+
+                  <Col span={24}>
+                    <Table
+                      columns={planColumns}
+                      dataSource={station.dailyPlan}
+                      rowKey="hour"
+                      size="small"
+                      pagination={{
+                        current: currentPage,
+                        pageSize: 8,
+                        size: 'small',
+                        onChange: (page) => setPlanPage((prev) => ({ ...prev, [station.id]: page })),
+                      }}
+                      style={{ marginTop: 4 }}
+                    />
+                  </Col>
+
                   <Col span={24}>
                     <Button
                       type="link"
@@ -268,11 +491,23 @@ export default function EnergyStorage() {
                     {isExpanded && (
                       <Table
                         columns={participantColumns}
-                        dataSource={station.participants}
+                        dataSource={station.participants.map((p) => {
+                          const totalShare = station.participants.reduce((s, pp) => s + pp.share, 0)
+                          const planRev = Math.round((Math.abs(station.estimatedRevenue) * p.share / totalShare) * 100) / 100
+                          return { ...p, planRevenue: planRev }
+                        })}
                         rowKey="name"
                         size="small"
                         pagination={false}
                         style={{ marginTop: 8 }}
+                        summary={() => (
+                          <Table.Summary.Row>
+                            <Table.Summary.Cell index={0}><Text strong>合计</Text></Table.Summary.Cell>
+                            <Table.Summary.Cell index={1}><Text strong>{station.participants.reduce((s, p) => s + p.share, 0).toFixed(1)}%</Text></Table.Summary.Cell>
+                            <Table.Summary.Cell index={2}><Text strong>{station.participants.reduce((s, p) => s + p.revenue, 0).toFixed(2)}万元</Text></Table.Summary.Cell>
+                            <Table.Summary.Cell index={3}><Text strong style={{ color: '#52c41a' }}>{Math.abs(station.estimatedRevenue).toFixed(2)}万元</Text></Table.Summary.Cell>
+                          </Table.Summary.Row>
+                        )}
                       />
                     )}
                   </Col>
@@ -292,6 +527,20 @@ export default function EnergyStorage() {
         <Col xs={24} lg={10}>
           <Card style={cardStyle} title={<span><DollarOutlined style={{ marginRight: 8, color: '#faad14' }} />收益分成分布</span>}>
             <ReactECharts option={revenuePieOption} style={{ height: 320 }} />
+          </Card>
+        </Col>
+      </Row>
+
+      <Row style={{ marginTop: 16 }}>
+        <Col span={24}>
+          <Card style={cardStyle} bodyStyle={{ padding: 16 }}>
+            <Statistic
+              title="全站预计日总收益"
+              value={totalEstimatedRevenue.toFixed(2)}
+              suffix="元"
+              prefix={<DollarOutlined style={{ color: '#52c41a' }} />}
+              valueStyle={{ color: totalEstimatedRevenue >= 0 ? '#52c41a' : '#ff4d4f', fontSize: 24 }}
+            />
           </Card>
         </Col>
       </Row>

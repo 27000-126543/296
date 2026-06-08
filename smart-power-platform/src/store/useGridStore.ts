@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { GridApplication } from '../types'
-import { generateGridApplications } from '../utils/mockData'
+import { generateGridApplications, checkCapacity } from '../utils/mockData'
 import dayjs from 'dayjs'
 
 interface GridState {
@@ -42,19 +42,24 @@ export const useGridStore = create<GridState>((set) => ({
     }))
   },
   submitApplication: (app) => {
+    const plannedOutput = app.plannedOutput || Array.from({ length: 24 }, () => 50)
+    const recommendedPoint = app.recommendedPoint || '110kV东郊变'
+    const capacity = app.capacity || 100
+    const checkResult = checkCapacity(capacity, plannedOutput, recommendedPoint)
     set((state) => ({
       applications: [
         {
           id: `GA${String(state.applications.length + 1).padStart(4, '0')}`,
           applicant: app.applicant || '新申请人',
           sourceType: app.sourceType || 'wind',
-          capacity: app.capacity || 100,
-          plannedOutput: app.plannedOutput || Array.from({ length: 24 }, () => 50),
-          recommendedPoint: app.recommendedPoint || '110kV东郊变',
+          capacity,
+          plannedOutput,
+          recommendedPoint: checkResult.suggestedPoint && !checkResult.passed ? checkResult.suggestedPoint : recommendedPoint,
           status: 'submitted' as const,
           currentApprovalLevel: 0 as const,
           submittedAt: dayjs().format('YYYY-MM-DD HH:mm:ss'),
-          capacityVerified: true,
+          capacityVerified: checkResult.passed,
+          capacityCheckResult: checkResult,
         },
         ...state.applications,
       ],

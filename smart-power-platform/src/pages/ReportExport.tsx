@@ -61,16 +61,8 @@ export default function ReportExport() {
     if (typeFilter) {
       result = result.filter((s) => s.type === typeFilter)
     }
-    if (dateRange && dateRange[0] && dateRange[1]) {
-      const start = dateRange[0].startOf('day')
-      const end = dateRange[1].endOf('day')
-      result = result.filter((s) => {
-        const d = dayjs(s.id.slice(0, 8))
-        return d.isAfter(start) && d.isBefore(end)
-      })
-    }
     return result
-  }, [sources, areaFilter, typeFilter, dateRange])
+  }, [sources, areaFilter, typeFilter])
 
   const filteredLoad = useMemo(() => {
     let result = loadData

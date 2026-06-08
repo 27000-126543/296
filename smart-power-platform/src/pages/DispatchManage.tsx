@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Card, Row, Col, Table, Tag, Button, Statistic, Typography, Modal, Space, message } from 'antd'
+import { useState, useEffect } from 'react'
+import { Card, Row, Col, Table, Tag, Button, Statistic, Typography, Modal, Space, Steps, message } from 'antd'
 import {
   ClockCircleOutlined,
   SyncOutlined,
@@ -7,11 +7,15 @@ import {
   CloseCircleOutlined,
   ExclamationCircleOutlined,
   EyeOutlined,
+  ThunderboltOutlined,
+  RobotOutlined,
+  ArrowRightOutlined,
 } from '@ant-design/icons'
 import ReactECharts from 'echarts-for-react'
 import { useDispatchStore } from '../store/useDispatchStore'
+import { usePowerStore } from '../store/usePowerStore'
 import { useAuthStore } from '../store/useAuthStore'
-import { formatDate } from '../utils/helpers'
+import { formatDate, calcPowerBalance } from '../utils/helpers'
 import type { DispatchOrder } from '../types'
 
 const { Title, Text } = Typography
@@ -37,12 +41,27 @@ const STATUS_CONFIG: Record<DispatchOrder['status'], { label: string; color: str
   rejected: { label: '已拒绝', color: 'red' },
 }
 
+const STATUS_STEP_MAP: Record<DispatchOrder['status'], number> = {
+  pending: 0,
+  confirmed: 1,
+  executing: 2,
+  completed: 3,
+  rejected: -1,
+}
+
 export default function DispatchManage() {
-  const { orders, confirmOrder, rejectOrder, completeOrder } = useDispatchStore()
+  const { orders, confirmOrder, rejectOrder, completeOrder, autoGenerate } = useDispatchStore()
+  const { totalGeneration, totalLoad } = usePowerStore()
   const user = useAuthStore((s) => s.user)
   const [detailOrder, setDetailOrder] = useState<DispatchOrder | null>(null)
 
   const canOperate = (user?.role ?? 0) >= 3
+
+  const balanceInfo = calcPowerBalance(totalGeneration, totalLoad)
+
+  useEffect(() => {
+    useDispatchStore.getState().refresh()
+  }, [])
 
   const pendingCount = orders.filter((o) => o.status === 'pending').length
   const executingCount = orders.filter((o) => o.status === 'executing').length
@@ -76,6 +95,11 @@ export default function DispatchManage() {
         message.warning('调度指令已拒绝')
       },
     })
+  }
+
+  const handleAutoGenerate = () => {
+    autoGenerate()
+    message.success('已检测供需状态并生成调度建议')
   }
 
   const typeCountMap: Record<string, number> = {}
@@ -143,9 +167,28 @@ export default function DispatchManage() {
       key: 'deviation',
       width: 110,
       render: (_: unknown, record: DispatchOrder) => {
-        const dev = record.targetOutput - record.currentOutput
+        const dev = record.deviation ?? (record.targetOutput - record.currentOutput)
         const color = Math.abs(dev) < 10 ? '#52c41a' : Math.abs(dev) < 50 ? '#faad14' : '#ff4d4f'
         return <Text style={{ color }}>{dev > 0 ? '+' : ''}{dev.toFixed(1)}</Text>
+      },
+    },
+    {
+      title: '平衡影响',
+      key: 'balanceImpact',
+      width: 160,
+      render: (_: unknown, record: DispatchOrder) => {
+        if (record.balanceBefore == null || record.balanceAfter == null) return <Text type="secondary">-</Text>
+        const before = record.balanceBefore
+        const after = record.balanceAfter
+        const improved = Math.abs(after) < Math.abs(before)
+        const color = improved ? '#52c41a' : '#ff4d4f'
+        return (
+          <span>
+            <Text style={{ color: before >= 0 ? '#52c41a' : '#ff4d4f' }}>{before.toFixed(1)}</Text>
+            <ArrowRightOutlined style={{ margin: '0 6px', fontSize: 10, color }} />
+            <Text style={{ color: after >= 0 ? '#52c41a' : '#ff4d4f' }}>{after.toFixed(1)}</Text>
+          </span>
+        )
       },
     },
     {
@@ -209,11 +252,67 @@ export default function DispatchManage() {
     },
   ]
 
+  const currentStep = detailOrder ? STATUS_STEP_MAP[detailOrder.status] : 0
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Title level={4} style={{ margin: 0 }}>调度指令管理</Title>
+        {canOperate && (
+          <Button type="primary" icon={<RobotOutlined />} onClick={handleAutoGenerate}>
+            检测并生成调度建议
+          </Button>
+        )}
       </div>
+
+      <Card
+        style={{ ...cardStyle, marginBottom: 16, borderLeft: `4px solid ${balanceInfo.status === 'surplus' ? '#52c41a' : balanceInfo.status === 'deficit' ? '#ff4d4f' : '#1890ff'}` }}
+        bodyStyle={{ padding: '16px 24px' }}
+      >
+        <Row gutter={24} align="middle">
+          <Col span={5}>
+            <Statistic
+              title="总发电量"
+              value={totalGeneration.toFixed(1)}
+              suffix="MW"
+              prefix={<ThunderboltOutlined style={{ color: '#1890ff' }} />}
+              valueStyle={{ color: '#1890ff', fontSize: 22 }}
+            />
+          </Col>
+          <Col span={5}>
+            <Statistic
+              title="总负荷"
+              value={totalLoad.toFixed(1)}
+              suffix="MW"
+              valueStyle={{ fontSize: 22 }}
+            />
+          </Col>
+          <Col span={5}>
+            <Statistic
+              title="供需差值"
+              value={balanceInfo.balance.toFixed(1)}
+              suffix="MW"
+              valueStyle={{ color: balanceInfo.balance >= 0 ? '#52c41a' : '#ff4d4f', fontSize: 22 }}
+            />
+          </Col>
+          <Col span={5}>
+            <Statistic
+              title="偏差率"
+              value={balanceInfo.rate}
+              suffix="%"
+              valueStyle={{ color: Math.abs(balanceInfo.rate) <= 2 ? '#52c41a' : '#ff4d4f', fontSize: 22 }}
+            />
+          </Col>
+          <Col span={4} style={{ textAlign: 'center' }}>
+            <Tag
+              color={balanceInfo.status === 'surplus' ? 'success' : balanceInfo.status === 'deficit' ? 'error' : 'processing'}
+              style={{ fontSize: 16, padding: '4px 16px', borderRadius: 4 }}
+            >
+              {balanceInfo.status === 'balanced' ? '供需平衡' : '供需失衡'}
+            </Tag>
+          </Col>
+        </Row>
+      </Card>
 
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} md={6}>
@@ -270,7 +369,7 @@ export default function DispatchManage() {
               dataSource={orders}
               rowKey="id"
               size="middle"
-              scroll={{ x: 1400 }}
+              scroll={{ x: 1600 }}
               pagination={{ pageSize: 10, showSizeChanger: true, showTotal: (total) => `共 ${total} 条` }}
             />
           </Card>
@@ -287,63 +386,119 @@ export default function DispatchManage() {
         open={!!detailOrder}
         onCancel={() => setDetailOrder(null)}
         footer={null}
-        width={560}
+        width={640}
       >
         {detailOrder && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 24px' }}>
-            <div>
-              <Text type="secondary">指令编号</Text>
-              <div><Text strong>{detailOrder.id}</Text></div>
+          <div>
+            <div style={{ marginBottom: 24 }}>
+              <Text type="secondary" style={{ fontSize: 13 }}>执行进度</Text>
+              <Steps
+                current={currentStep}
+                size="small"
+                style={{ marginTop: 8 }}
+                items={[
+                  { title: '待确认' },
+                  { title: '已确认' },
+                  { title: '执行中' },
+                  { title: '已完成' },
+                ]}
+              />
             </div>
-            <div>
-              <Text type="secondary">电源名称</Text>
-              <div><Text strong>{detailOrder.sourceName}</Text></div>
-            </div>
-            <div>
-              <Text type="secondary">指令类型</Text>
-              <div><Tag color={TYPE_CONFIG[detailOrder.type].color}>{TYPE_CONFIG[detailOrder.type].label}</Tag></div>
-            </div>
-            <div>
-              <Text type="secondary">状态</Text>
-              <div><Tag color={STATUS_CONFIG[detailOrder.status].color}>{STATUS_CONFIG[detailOrder.status].label}</Tag></div>
-            </div>
-            <div>
-              <Text type="secondary">目标出力</Text>
-              <div><Text strong>{detailOrder.targetOutput.toFixed(1)} MW</Text></div>
-            </div>
-            <div>
-              <Text type="secondary">当前出力</Text>
-              <div><Text strong>{detailOrder.currentOutput.toFixed(1)} MW</Text></div>
-            </div>
-            <div>
-              <Text type="secondary">偏差</Text>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 24px' }}>
               <div>
-                {(() => {
-                  const dev = detailOrder.targetOutput - detailOrder.currentOutput
-                  const color = Math.abs(dev) < 10 ? '#52c41a' : Math.abs(dev) < 50 ? '#faad14' : '#ff4d4f'
-                  return <Text strong style={{ color }}>{dev > 0 ? '+' : ''}{dev.toFixed(1)} MW</Text>
-                })()}
+                <Text type="secondary">指令编号</Text>
+                <div><Text strong>{detailOrder.id}</Text></div>
+              </div>
+              <div>
+                <Text type="secondary">电源名称</Text>
+                <div><Text strong>{detailOrder.sourceName}</Text></div>
+              </div>
+              <div>
+                <Text type="secondary">指令类型</Text>
+                <div><Tag color={TYPE_CONFIG[detailOrder.type].color}>{TYPE_CONFIG[detailOrder.type].label}</Tag></div>
+              </div>
+              <div>
+                <Text type="secondary">状态</Text>
+                <div><Tag color={STATUS_CONFIG[detailOrder.status].color}>{STATUS_CONFIG[detailOrder.status].label}</Tag></div>
+              </div>
+              <div>
+                <Text type="secondary">目标出力</Text>
+                <div><Text strong>{detailOrder.targetOutput.toFixed(1)} MW</Text></div>
+              </div>
+              <div>
+                <Text type="secondary">当前出力</Text>
+                <div><Text strong>{detailOrder.currentOutput.toFixed(1)} MW</Text></div>
+              </div>
+              <div>
+                <Text type="secondary">偏差</Text>
+                <div>
+                  {(() => {
+                    const dev = detailOrder.deviation ?? (detailOrder.targetOutput - detailOrder.currentOutput)
+                    const color = Math.abs(dev) < 10 ? '#52c41a' : Math.abs(dev) < 50 ? '#faad14' : '#ff4d4f'
+                    return <Text strong style={{ color }}>{dev > 0 ? '+' : ''}{dev.toFixed(1)} MW</Text>
+                  })()}
+                </div>
+              </div>
+              <div>
+                <Text type="secondary">操作人</Text>
+                <div><Text strong>{detailOrder.operator || '-'}</Text></div>
               </div>
             </div>
-            <div>
-              <Text type="secondary">操作人</Text>
-              <div><Text strong>{detailOrder.operator || '-'}</Text></div>
+
+            <div style={{ marginTop: 20, padding: 16, background: '#fafafa', borderRadius: 8 }}>
+              <Text type="secondary" style={{ fontSize: 13 }}>调整前后对比</Text>
+              <Row gutter={16} style={{ marginTop: 12 }}>
+                <Col span={12}>
+                  <div style={{ textAlign: 'center', padding: 12, background: '#fff', borderRadius: 6, border: '1px solid #f0f0f0' }}>
+                    <Text type="secondary" style={{ fontSize: 12 }}>出力调整</Text>
+                    <div style={{ marginTop: 8 }}>
+                      <Text strong style={{ fontSize: 18, color: '#595959' }}>{detailOrder.beforeOutput.toFixed(1)}</Text>
+                      <Text type="secondary" style={{ margin: '0 8px' }}>MW</Text>
+                      <ArrowRightOutlined style={{ color: detailOrder.targetOutput > detailOrder.beforeOutput ? '#52c41a' : '#ff4d4f', margin: '0 8px' }} />
+                      <Text strong style={{ fontSize: 18, color: detailOrder.targetOutput > detailOrder.beforeOutput ? '#52c41a' : '#ff4d4f' }}>{detailOrder.targetOutput.toFixed(1)}</Text>
+                      <Text type="secondary" style={{ marginLeft: 4 }}>MW</Text>
+                    </div>
+                  </div>
+                </Col>
+                <Col span={12}>
+                  <div style={{ textAlign: 'center', padding: 12, background: '#fff', borderRadius: 6, border: '1px solid #f0f0f0' }}>
+                    <Text type="secondary" style={{ fontSize: 12 }}>平衡变化</Text>
+                    <div style={{ marginTop: 8 }}>
+                      {detailOrder.balanceBefore != null && detailOrder.balanceAfter != null ? (
+                        <>
+                          <Text strong style={{ fontSize: 18, color: detailOrder.balanceBefore >= 0 ? '#52c41a' : '#ff4d4f' }}>{detailOrder.balanceBefore.toFixed(1)}</Text>
+                          <Text type="secondary" style={{ margin: '0 4px' }}>MW</Text>
+                          <ArrowRightOutlined style={{ color: Math.abs(detailOrder.balanceAfter) < Math.abs(detailOrder.balanceBefore) ? '#52c41a' : '#ff4d4f', margin: '0 8px' }} />
+                          <Text strong style={{ fontSize: 18, color: detailOrder.balanceAfter >= 0 ? '#52c41a' : '#ff4d4f' }}>{detailOrder.balanceAfter.toFixed(1)}</Text>
+                          <Text type="secondary" style={{ marginLeft: 4 }}>MW</Text>
+                        </>
+                      ) : (
+                        <Text type="secondary">暂无数据</Text>
+                      )}
+                    </div>
+                  </div>
+                </Col>
+              </Row>
             </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <Text type="secondary">调度原因</Text>
-              <div><Text>{detailOrder.reason}</Text></div>
-            </div>
-            <div>
-              <Text type="secondary">创建时间</Text>
-              <div><Text>{formatDate(detailOrder.createdAt)}</Text></div>
-            </div>
-            <div>
-              <Text type="secondary">确认时间</Text>
-              <div><Text>{detailOrder.confirmedAt ? formatDate(detailOrder.confirmedAt) : '-'}</Text></div>
-            </div>
-            <div>
-              <Text type="secondary">完成时间</Text>
-              <div><Text>{detailOrder.completedAt ? formatDate(detailOrder.completedAt) : '-'}</Text></div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 24px', marginTop: 20 }}>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <Text type="secondary">调度原因</Text>
+                <div><Text>{detailOrder.reason}</Text></div>
+              </div>
+              <div>
+                <Text type="secondary">创建时间</Text>
+                <div><Text>{formatDate(detailOrder.createdAt)}</Text></div>
+              </div>
+              <div>
+                <Text type="secondary">确认时间</Text>
+                <div><Text>{detailOrder.confirmedAt ? formatDate(detailOrder.confirmedAt) : '-'}</Text></div>
+              </div>
+              <div>
+                <Text type="secondary">完成时间</Text>
+                <div><Text>{detailOrder.completedAt ? formatDate(detailOrder.completedAt) : '-'}</Text></div>
+              </div>
             </div>
           </div>
         )}
