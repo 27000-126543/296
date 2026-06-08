@@ -80,13 +80,23 @@ export default function PowerMonitor() {
     return { totalCapacity, currentOutput, onlineCount, utilization }
   }, [filteredSources])
 
-  const balance = useMemo(() => {
+  const displayGen = useMemo(() => {
     if (user?.role === 1) {
-      const myGen = filteredSources.filter((s) => s.status === 'online').reduce((sum, s) => sum + s.currentOutput, 0)
-      return calcPowerBalance(myGen, 0)
+      return filteredSources.filter((s) => s.status === 'online').reduce((sum, s) => sum + s.currentOutput, 0)
     }
-    return calcPowerBalance(totalGeneration, totalLoad)
-  }, [filteredSources, totalGeneration, totalLoad, user])
+    return totalGeneration
+  }, [filteredSources, totalGeneration, user])
+
+  const displayLoad = useMemo(() => {
+    if (user?.role === 1) {
+      return 0
+    }
+    return totalLoad
+  }, [totalLoad, user])
+
+  const balance = useMemo(() => {
+    return calcPowerBalance(displayGen, displayLoad)
+  }, [displayGen, displayLoad])
 
   const generationByType = useMemo(() => {
     const map: Record<string, number> = { thermal: 0, hydro: 0, wind: 0, solar: 0 }
@@ -356,15 +366,15 @@ export default function PowerMonitor() {
           >
             <Row gutter={[24, 16]} align="middle">
               <Col xs={24} sm={6} style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 13, color: '#8c8c8c', marginBottom: 4 }}>总发电</div>
-                <div style={{ fontSize: 24, fontWeight: 600, color: '#1890ff' }}>{formatPower(totalGeneration)}</div>
+                <div style={{ fontSize: 13, color: '#8c8c8c', marginBottom: 4 }}>{user?.role === 1 ? '本厂发电' : '总发电'}</div>
+                <div style={{ fontSize: 24, fontWeight: 600, color: '#1890ff' }}>{formatPower(displayGen)}</div>
               </Col>
               <Col xs={24} sm={2} style={{ textAlign: 'center', fontSize: 20, color: '#8c8c8c' }}>
                 <MinusOutlined />
               </Col>
               <Col xs={24} sm={6} style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 13, color: '#8c8c8c', marginBottom: 4 }}>总负荷</div>
-                <div style={{ fontSize: 24, fontWeight: 600, color: '#faad14' }}>{formatPower(totalLoad)}</div>
+                <div style={{ fontSize: 13, color: '#8c8c8c', marginBottom: 4 }}>{user?.role === 1 ? '本厂负荷' : '总负荷'}</div>
+                <div style={{ fontSize: 24, fontWeight: 600, color: '#faad14' }}>{formatPower(displayLoad)}</div>
               </Col>
               <Col xs={24} sm={2} style={{ textAlign: 'center', fontSize: 20, color: '#8c8c8c' }}>
                 =

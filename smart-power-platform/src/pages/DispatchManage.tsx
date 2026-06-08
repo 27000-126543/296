@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Card, Row, Col, Table, Tag, Button, Statistic, Typography, Modal, Space, Steps, Timeline, message } from 'antd'
 import {
   ClockCircleOutlined,
@@ -58,10 +58,6 @@ export default function DispatchManage() {
   const canOperate = (user?.role ?? 0) >= 3
 
   const balanceInfo = calcPowerBalance(totalGeneration, totalLoad)
-
-  useEffect(() => {
-    useDispatchStore.getState().refresh()
-  }, [])
 
   const pendingCount = orders.filter((o) => o.status === 'pending').length
   const executingCount = orders.filter((o) => o.status === 'executing').length

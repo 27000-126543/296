@@ -126,17 +126,33 @@ export const useDispatchStore = create<DispatchState>((set) => ({
       const newOrders = generateDispatchOrdersFromBalance(sources, loadData)
       const pending = newOrders.filter((o) => o.status === 'pending')
       if (pending.length > 0) {
-        set((state) => ({
-          orders: [...pending, ...state.orders.filter((o) => o.status !== 'pending')],
-          auditLogs: addAuditLog(state.auditLogs, {
+        set((state) => {
+          let logs = state.auditLogs
+          logs = addAuditLog(logs, {
             orderId: 'SYSTEM',
             action: 'auto_generate',
             operator: '系统自动',
             timestamp: now,
             detail: `供需偏差${Math.abs(balance).toFixed(0)}MW（偏差率${Math.abs(rate).toFixed(1)}%），自动生成${pending.length}条调度建议`,
             balanceBefore: Math.round(balance * 10) / 10,
-          }),
-        }))
+          })
+          pending.forEach((o) => {
+            logs = addAuditLog(logs, {
+              orderId: o.id,
+              action: 'auto_generate',
+              operator: '系统自动',
+              timestamp: now,
+              detail: `自动生成调度建议：${o.sourceName}出力从${o.currentOutput.toFixed(1)}MW调整为${o.targetOutput.toFixed(1)}MW，原因：${o.reason}`,
+              balanceBefore: Math.round(balance * 10) / 10,
+              outputBefore: o.currentOutput,
+              outputAfter: o.targetOutput,
+            })
+          })
+          return {
+            orders: [...pending, ...state.orders.filter((o) => o.status !== 'pending')],
+            auditLogs: logs,
+          }
+        })
         useNotificationStore.getState().addNotification({
           title: '调度指令建议',
           content: `供需偏差${Math.abs(balance).toFixed(0)}MW，已生成${pending.length}条调度建议`,

@@ -32,7 +32,7 @@ const MENU_ITEMS = [
   { key: '/grid', icon: <ApiOutlined />, label: '并网申请', allowedRoles: [3, 4] },
   { key: '/storage', icon: <ControlOutlined />, label: '储能电站', allowedRoles: [3, 4] },
   { key: '/carbon', icon: <CloudOutlined />, label: '碳排放监控', allowedRoles: [1, 3, 4] },
-  { key: '/report', icon: <FileTextOutlined />, label: '报表分析', allowedRoles: [4] },
+  { key: '/report', icon: <FileTextOutlined />, label: '报表分析', allowedRoles: [0, 1, 2, 4] },
 ]
 
 const DEFAULT_PATHS: Record<number, string> = {
@@ -52,7 +52,7 @@ const ROUTE_PERMISSIONS: Record<string, number[]> = {
   '/grid': [3, 4],
   '/storage': [3, 4],
   '/carbon': [1, 3, 4],
-  '/report': [4],
+  '/report': [0, 1, 2, 4],
 }
 
 const NOTIFICATION_TYPE_MAP: Record<string, { color: string; label: string }> = {

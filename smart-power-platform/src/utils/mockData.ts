@@ -151,14 +151,15 @@ export function generateDispatchOrders(sources: PowerSource[]): DispatchOrder[] 
 }
 
 export function generateFaultRecords(): FaultRecord[] {
-  const areas = ['华东', '华南', '华北', '华中', '西北', '西南']
+  const allSources = generatePowerSources()
   const types = ['线路故障', '变压器故障', '开关拒动', '接地故障', '过载跳闸']
   const levels: FaultRecord['level'][] = ['critical', 'major', 'minor']
   const statuses: FaultRecord['status'][] = ['pending', 'assigned', 'accepted', 'repairing', 'resolved']
   const teams = ['抢修班组A', '抢修班组B', '抢修班组C', '抢修班组D', '抢修班组E']
   const now = dayjs()
   return Array.from({ length: 10 }, (_, i) => {
-    const area = areas[Math.floor(Math.random() * areas.length)]
+    const src = allSources[Math.floor(Math.random() * allSources.length)]
+    const area = src.area
     const level = levels[Math.floor(Math.random() * levels.length)]
     const status = statuses[Math.floor(Math.random() * statuses.length)]
     const assignedTeam = status !== 'pending' ? teams[Math.floor(Math.random() * teams.length)] : undefined
@@ -173,6 +174,8 @@ export function generateFaultRecords(): FaultRecord[] {
       id: `FT${String(i + 1).padStart(4, '0')}`,
       area,
       location: `${area}区域${Math.floor(Math.random() * 10 + 1)}号变电站`,
+      sourceId: src.id,
+      sourceName: src.name,
       type: types[Math.floor(Math.random() * types.length)],
       level,
       description: `${area}区域${types[i % 5]}，影响${rand(10, 100)}MW负荷`,
@@ -320,22 +323,29 @@ export function generateStorageStations(): StorageStation[] {
 }
 
 export function generateCarbonData(): CarbonData[] {
-  const areas = ['华东', '华南', '华北', '华中', '西北', '西南']
+  const allSources = generatePowerSources()
+  const result: CarbonData[] = []
   const now = dayjs()
-  return areas.map((area, i) => {
-    const quota = rand(5000, 15000)
-    const used = rand(3000, quota * 1.2)
-    return {
-      id: `CB${String(i + 1).padStart(3, '0')}`,
-      area,
-      emission: rand(3000, 12000),
+  let idx = 0
+  allSources.forEach((src) => {
+    if (src.type === 'wind' || src.type === 'solar') return
+    const quota = rand(500, 3000)
+    const used = rand(200, quota * 1.1)
+    idx++
+    result.push({
+      id: `CB${String(idx).padStart(3, '0')}`,
+      area: src.area,
+      sourceId: src.id,
+      sourceName: src.name,
+      emission: rand(500, 5000),
       intensity: rand(0.3, 0.9),
       quota,
       used: Math.round(used * 10) / 10,
       timestamp: now.format('YYYY-MM-DD HH:mm:ss'),
       warning: used > quota,
-    }
+    })
   })
+  return result
 }
 
 export function generatePriceData(): PriceData[] {

@@ -30,8 +30,8 @@ export default function CarbonMonitor() {
 
   const filteredData = useMemo(() => {
     if (!user) return data
-    if (user.role === 1 && user.area) {
-      return data.filter((d) => d.area === user.area)
+    if (user.role === 1 && user.plantId) {
+      return data.filter((d) => d.sourceId === user.plantId)
     }
     if (user.role === 0 && user.area) {
       return data.filter((d) => d.area === user.area)

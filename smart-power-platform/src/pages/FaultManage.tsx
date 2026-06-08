@@ -79,8 +79,8 @@ export default function FaultManage() {
 
   const filteredRecords = useMemo(() => {
     if (!user) return records
-    if (user.role === 1) return records.filter((r) => r.area === user.area)
-    if (user.role === 2) return records.filter((r) => user.proxyAreas?.includes(r.area))
+    if (user.role === 1 && user.plantId) return records.filter((r) => r.sourceId === user.plantId)
+    if (user.role === 2 && user.proxyAreas) return records.filter((r) => user.proxyAreas!.includes(r.area))
     return records
   }, [records, user])
 

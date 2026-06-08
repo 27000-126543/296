@@ -84,8 +84,8 @@ export default function ReportExport() {
   }, [loadData, userRole, user])
 
   const roleFilteredFaults = useMemo(() => {
-    if (userRole === 1 && user?.area) {
-      return faultRecords.filter((f) => f.area === user.area)
+    if (userRole === 1 && user?.plantId) {
+      return faultRecords.filter((f) => f.sourceId === user.plantId)
     }
     if (userRole === 2 && user?.proxyAreas) {
       return faultRecords.filter((f) => user.proxyAreas!.includes(f.area))
@@ -94,8 +94,8 @@ export default function ReportExport() {
   }, [faultRecords, userRole, user])
 
   const roleFilteredCarbon = useMemo(() => {
-    if (userRole === 1 && user?.area) {
-      return carbonData.filter((c) => c.area === user.area)
+    if (userRole === 1 && user?.plantId) {
+      return carbonData.filter((c) => c.sourceId === user.plantId)
     }
     return carbonData
   }, [carbonData, userRole, user])

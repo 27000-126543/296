@@ -42,6 +42,8 @@ export interface FaultRecord {
   id: string
   area: string
   location: string
+  sourceId?: string
+  sourceName?: string
   type: string
   level: 'critical' | 'major' | 'minor'
   description: string
@@ -129,6 +131,8 @@ export interface DispatchAuditLog {
 export interface CarbonData {
   id: string
   area: string
+  sourceId?: string
+  sourceName?: string
   emission: number
   intensity: number
   quota: number

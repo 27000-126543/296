@@ -49,7 +49,7 @@ export function formatDate(date: string): string {
 
 export function calcPowerBalance(generation: number, load: number): { balance: number; rate: number; status: 'surplus' | 'deficit' | 'balanced' } {
   const balance = generation - load
-  const rate = (balance / load) * 100
+  const rate = load > 0 ? (balance / load) * 100 : (generation > 0 ? 100 : 0)
   let status: 'surplus' | 'deficit' | 'balanced' = 'balanced'
   if (rate > 2) status = 'surplus'
   else if (rate < -2) status = 'deficit'

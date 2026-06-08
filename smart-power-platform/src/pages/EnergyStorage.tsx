@@ -482,10 +482,9 @@ export default function EnergyStorage() {
                             onChange={(e) => handleModeChange(station.id, e.target.value)}
                             optionType="button"
                             buttonStyle="solid"
-                            disabled={isAuto}
                           >
-                            <Radio.Button value="charging" style={{ color: !isAuto && station.mode === 'charging' ? '#1890ff' : undefined }}>充电</Radio.Button>
-                            <Radio.Button value="discharging" style={{ color: !isAuto && station.mode === 'discharging' ? '#52c41a' : undefined }}>放电</Radio.Button>
+                            <Radio.Button value="charging" style={{ color: station.mode === 'charging' ? '#1890ff' : undefined }}>充电</Radio.Button>
+                            <Radio.Button value="discharging" style={{ color: station.mode === 'discharging' ? '#52c41a' : undefined }}>放电</Radio.Button>
                             <Radio.Button value="standby">待机</Radio.Button>
                           </Radio.Group>
                         </Space>
